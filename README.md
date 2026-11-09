@@ -44,11 +44,11 @@ no log file is ever touched. costcrew only ever reads files newer than `--since`
 
 ```sh
 # from source (Rust 1.80+)
-git clone https://github.com/YOUR_USERNAME/costcrew
+git clone https://github.com/Arch087146/costcrew
 cargo install --path costcrew
 ```
 
-Prebuilt binaries land on the [Releases](https://github.com/YOUR_USERNAME/costcrew/releases)
+Prebuilt binaries land on the [Releases](https://github.com/Arch087146/costcrew/releases)
 page when a tag is pushed. No runtime dependencies — everything's read from disk.
 
 ## Usage
