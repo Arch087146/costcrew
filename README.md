@@ -6,25 +6,9 @@ Desktop dashboards hide it behind your subscription. costcrew reads the usage lo
 already sitting on your machine, applies per-model prices, and prints the bill —
 per model, in dollars, right in your terminal.
 
-```text
-  costcrew · AI agent spend · last 7d
-
-  provider                    model  reqs  tokens in  tokens out   cache  cost (usd)
-  --------  ------------------------  ----  ---------  ----------  -------  ----------
-    claude  claude-opus-4-5-20260115     2      71000       16400  4540000     19.2825
-    claude         claude-sonnet-4-5     3      55500       13200  2968000      2.4900
-  opencode                     glm-5     3     114000       28700   695000      0.4024
-     codex             gpt-5.2-codex     2      20000        4000   801000      0.3125
-  opencode          mystery-coder-xl     1      30000        8000    10000           ?
-  --------  --------  total             290500        70300   9014000         $22.49
-
-    claude-opus-4-5-20260115 ######################## $19.28
-           claude-sonnet-4-5 ### $2.49
-                       glm-5 # $0.40
-               gpt-5.2-codex # $0.31
-
-  1 model(s) not priced yet — saw them, didn't bill them.
-```
+<p align="center">
+  <img src="assets/demo.png" alt="costcrew demo — a table of AI agent spend per model with a bar chart" width="700">
+</p>
 
 That "mystery-coder-xl" row is deliberate: when costcrew doesn't recognize a model,
 it shows what it found but refuses to invent a price.
@@ -39,6 +23,14 @@ it shows what it found but refuses to invent a price.
 
 Everything is read **read-only** — the SQLite connection is opened `READ_ONLY`, and
 no log file is ever touched. costcrew only ever reads files newer than `--since`.
+
+Here it is five minutes after `cargo install`, reading a real OpenCode database —
+note it found 325 requests for a model it has no price for and *scaled the unknown
+model honestly* instead of making a number up:
+
+<p align="center">
+  <img src="assets/scan.png" alt="costcrew scanning a real OpenCode database — 325 requests, unpriced model shown with a question mark" width="620">
+</p>
 
 ## Install
 
@@ -60,6 +52,12 @@ costcrew md > spend.md   # shareable markdown table (great for standups or gists
 costcrew --json          # machine-readable — pipe into a cron, a webhook, whatever
 costcrew demo            # sample report from synthetic data, no scanning needed
 ```
+
+And `--help`, for people who judge CLIs by their help text:
+
+<p align="center">
+  <img src="assets/help.png" alt="costcrew --help output" width="580">
+</p>
 
 ## Pricing
 
