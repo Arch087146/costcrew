@@ -129,6 +129,8 @@ pub fn print_catalog() {
         println!("  {DIM}link    :{RESET} {}", a.url);
         println!();
     }
-    println!("  {DIM}got a lane we're missing? open an issue: github.com/Arch087146/costcrew{RESET}");
+    println!(
+        "  {DIM}got a lane we're missing? open an issue: github.com/Arch087146/costcrew{RESET}"
+    );
     println!();
 }

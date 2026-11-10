@@ -6,7 +6,7 @@
 //!   2. `costcrew openrouter` reads your OPENROUTER_API_KEY and reports what
 //!      you actually spent, per model, from the activity endpoint.
 
-use crate::price::{Pricing, PriceDB};
+use crate::price::{PriceDB, Pricing};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
@@ -73,14 +73,19 @@ pub fn force_refresh() -> Result<usize, String> {
     });
     let dir = cache_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("openrouter-prices.json"), doc.to_string()).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("openrouter-prices.json"), doc.to_string())
+        .map_err(|e| e.to_string())?;
     Ok(models.len())
 }
 
 pub fn cached_into_db(db: &mut PriceDB) -> usize {
     let path = cache_dir().join("openrouter-prices.json");
-    let Ok(text) = std::fs::read_to_string(&path) else { return 0 };
-    let Ok(v) = serde_json::from_str::<Value>(&text) else { return 0 };
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return 0;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        return 0;
+    };
     if v.get("version").and_then(Value::as_u64) != Some(CACHE_VERSION) {
         return 0;
     }

@@ -113,6 +113,29 @@ suggest a downgrade it can't back with your own measured spend. The last line is
 baked in: "run one task as an A/B and compare before rewiring your whole
 workflow."
 
+## Is the leaderboard crown worth its price?
+
+`costcrew leaderboard` answers what arena.ai can't: quality **and** the bill.
+Arena Elo from ~2M blind votes, priced three ways — raw in/out $, an
+`agent$` blend realistic for coding agents (20% input, 10% output,
+**70% cache-read** — cache dwarfs everything in agentic loops), and
+**elo/$** value points per dollar:
+
+```sh
+costcrew leaderboard                  # default: by Elo
+costcrew leaderboard --sort value     # what a cheapskate should actually run
+costcrew leaderboard --sort price
+costcrew leaderboard --top 50 --json
+```
+
+<p align="center">
+  <img src="assets/board.png" alt="costcrew leaderboard — LMArena Elo priced with the agentic token blend, sorted by Elo per dollar" width="780">
+</p>
+
+One caveat, stated plainly: the Elo snapshot is bundled with the binary and
+dated, like the prices — trust it within ±their margin of error (±4–19 pts),
+trust the prices within vendor-whim.
+
 ## Which agent runs on what?
 
 `costcrew catalog` prints the lay of the land — every coding agent's billing

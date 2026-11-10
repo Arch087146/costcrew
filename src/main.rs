@@ -1,5 +1,6 @@
 mod advise;
 mod args;
+mod board;
 mod catalog;
 mod demo;
 mod fetch;
@@ -28,6 +29,24 @@ fn main() {
             run(demo::demo_rows(&db), args, 7, &db);
         }
         Cmd::Catalog => catalog::print_catalog(),
+        Cmd::Leaderboard => {
+            let mut db = PriceDB::builtin();
+            fetch::cached_into_db(&mut db);
+            if let Some(path) = &args.prices {
+                load_custom(&mut db, path);
+            }
+            let sort = match &args.sort {
+                Some(s) => match board::parse_sort(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        std::process::exit(2);
+                    }
+                },
+                None => board::Sort::Elo,
+            };
+            board::print_board(&db, sort, args.top, args.json);
+        }
         Cmd::OpenRouter => {
             run_openrouter(&args);
         }
@@ -69,7 +88,9 @@ fn main() {
             let rows = aggregate(&events, &db);
             if args.cmd == Cmd::Advise && !rows.iter().any(|r| r.known_price) {
                 // advise is understood without priced scans — show it on demo data
-                println!("{DIM}(no priced usage found locally — showing advise on demo data){RESET}");
+                println!(
+                    "{DIM}(no priced usage found locally — showing advise on demo data){RESET}"
+                );
                 advise::print_advise(&demo::demo_rows(&db), &db, 7);
                 return;
             }
@@ -123,7 +144,11 @@ fn run_openrouter(args: &args::Args) {
             for (model, reqs, cost) in &rows {
                 println!(
                     "  {:>40}  {:>6}  {:>10.4}",
-                    if model.len() > 40 { &model[..40] } else { model },
+                    if model.len() > 40 {
+                        &model[..40]
+                    } else {
+                        model
+                    },
                     reqs,
                     cost
                 );
@@ -160,7 +185,10 @@ fn load_custom(db: &mut PriceDB, path: &str) {
         }
     };
     db.custom_count = n;
-    println!("using {n} custom price entr{} from {path}", if n == 1 { "y" } else { "ies" });
+    println!(
+        "using {n} custom price entr{} from {path}",
+        if n == 1 { "y" } else { "ies" }
+    );
 }
 
 fn load_list(db: &mut PriceDB, list: &serde_json::Value) -> usize {

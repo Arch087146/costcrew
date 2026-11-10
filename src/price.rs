@@ -88,14 +88,27 @@ impl PriceDB {
             .iter()
             .map(|(prefix, i, o, cr, cw)| PriceEntry {
                 prefix: prefix.to_string(),
-                price: Pricing { input: *i, output: *o, cache_read: *cr, cache_write: *cw, per_hour: 0.0 },
+                price: Pricing {
+                    input: *i,
+                    output: *o,
+                    cache_read: *cr,
+                    cache_write: *cw,
+                    per_hour: 0.0,
+                },
             })
             .collect();
-        PriceDB { entries, fetched_count: 0, custom_count: 0 }
+        PriceDB {
+            entries,
+            fetched_count: 0,
+            custom_count: 0,
+        }
     }
 
     pub fn push(&mut self, prefix: &str, price: Pricing) {
-        self.entries.push(PriceEntry { prefix: prefix.to_string(), price });
+        self.entries.push(PriceEntry {
+            prefix: prefix.to_string(),
+            price,
+        });
     }
 
     fn key_of(model: &str) -> &str {
@@ -104,13 +117,27 @@ impl PriceDB {
     }
 
     pub fn lookup(&self, model: &str) -> Option<Pricing> {
-        let m = model.to_lowercase();
-        let key = Self::key_of(&m).to_lowercase();
+        // normalize: OpenRouter uses dots ("claude-fable-5.1"), lmarena/agents
+        // use hyphens — treat both separators as equivalent
+        let norm = |s: &str| {
+            s.to_lowercase()
+                .chars()
+                .map(|c| {
+                    if c == '.' || c == '_' || c == '-' {
+                        '-'
+                    } else {
+                        c
+                    }
+                })
+                .collect::<String>()
+        };
+        let full = norm(model);
+        let seg = Self::key_of(&full).to_string();
 
         let mut best: Option<(usize, Pricing)> = None; // (prefix_len, price)
         for e in &self.entries {
-            let p = e.prefix.to_lowercase();
-            let hit = key.starts_with(&p) || m.starts_with(&p);
+            let p = norm(&e.prefix);
+            let hit = seg.starts_with(&p) || full.starts_with(&p);
             if hit {
                 let len = p.len();
                 if best.map_or(true, |(l, _)| len > l) {

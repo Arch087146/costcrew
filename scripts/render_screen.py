@@ -162,7 +162,7 @@ def main():
     if max_lines:
         rows = rows[: max_lines + 1]  # prompt row + N body rows
         rows.append([])  # ellipsis hint line
-        rows.append([(DIM, False, ch) for ch in "  ... (full output with `costcrew catalog`)"])
+        rows.append([(DIM, False, ch) for ch in f"  ... full output: {title}"])
     render(rows[1:], rows[0], out_path, title)
 
 

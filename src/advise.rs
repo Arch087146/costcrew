@@ -81,7 +81,9 @@ fn est_cost(row: &Row, alt: &str, db: &PriceDB) -> Option<f64> {
 
 pub fn print_advise(rows: &[Row], db: &PriceDB, since_days: u32) {
     println!();
-    println!("  {BOLD}costcrew advise{RESET} {DIM}· cheaper-model verdicts · last {since_days}d{RESET}");
+    println!(
+        "  {BOLD}costcrew advise{RESET} {DIM}· cheaper-model verdicts · last {since_days}d{RESET}"
+    );
     println!();
 
     if !rows.iter().any(|r| r.known_price && r.requests > 0) {
@@ -121,9 +123,7 @@ pub fn print_advise(rows: &[Row], db: &PriceDB, since_days: u32) {
             );
             println!(
                 "  {:>30}  {DIM}   same work would have cost ${:.2} instead of ${:.2}{RESET}",
-                "",
-                alt_cost,
-                r.cost
+                "", alt_cost, r.cost
             );
             suggested_ok += 1;
         }
@@ -133,8 +133,12 @@ pub fn print_advise(rows: &[Row], db: &PriceDB, since_days: u32) {
         println!("  {GREEN}✓ no waste pattern detected in the last {since_days}d — your tiers match your spend.{RESET}");
     } else {
         println!();
-        println!("  {DIM}heuristic: tiers from public coding evals, costs = your exact token mix{RESET}");
-        println!("  {DIM}at those prices. quality isn't guaranteed — run one task as an A/B and{RESET}");
+        println!(
+            "  {DIM}heuristic: tiers from public coding evals, costs = your exact token mix{RESET}"
+        );
+        println!(
+            "  {DIM}at those prices. quality isn't guaranteed — run one task as an A/B and{RESET}"
+        );
         println!("  {DIM}compare before rewiring your whole workflow.{RESET}");
     }
     println!();

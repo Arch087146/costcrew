@@ -69,13 +69,21 @@ fn scan_targets() -> Vec<(PathBuf, &'static str)> {
     // Prefer APPDATA (where VS Code globalStorage actually lives); fall back to
     // LOCALAPPDATA's parent so the scanner still runs on unusual setups.
     let mut gs: Option<PathBuf> = std::env::var_os("APPDATA").map(|a| {
-        PathBuf::from(a).join("Code").join("User").join("globalStorage")
+        PathBuf::from(a)
+            .join("Code")
+            .join("User")
+            .join("globalStorage")
     });
     if gs.is_none() {
         gs = std::env::var_os("LOCALAPPDATA").map(|l| {
             PathBuf::from(&l)
                 .parent()
-                .map(|p| p.join("Roaming").join("Code").join("User").join("globalStorage"))
+                .map(|p| {
+                    p.join("Roaming")
+                        .join("Code")
+                        .join("User")
+                        .join("globalStorage")
+                })
                 .unwrap_or_else(|| PathBuf::from(&l))
         });
     }
@@ -127,14 +135,18 @@ fn scan_aider_history(since_days: u32, events: &mut Vec<UsageEvent>) {
     let h = home();
     for name in [".aider.chat.history.md", ".aider.history.md"] {
         let path = h.join(name);
-        let Ok(meta) = fs::metadata(&path) else { continue };
+        let Ok(meta) = fs::metadata(&path) else {
+            continue;
+        };
         let Ok(mtime) = meta.modified() else { continue };
         if let Ok(age) = SystemTime::now().duration_since(mtime) {
             if age > Duration::from_secs(since_days as u64 * 86_400) {
                 continue;
             }
         }
-        let Ok(text) = fs::read_to_string(&path) else { continue };
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
         for line in text.lines() {
             if !line.contains("Cost:") {
                 continue;
@@ -366,8 +378,10 @@ fn extract_event(v: &Value, provider: &str, source: &Path) -> Option<UsageEvent>
 
     let input = num(um, &["input_tokens", "inputTokens", "tokensIn", "input"]);
     // reasoning tokens are billed as output on most APIs — fold them in
-    let output = num(um, &["output_tokens", "outputTokens", "tokensOut", "output"])
-        + num(um, &["reasoning_tokens", "reasoningTokens", "reasoning"]);
+    let output = num(
+        um,
+        &["output_tokens", "outputTokens", "tokensOut", "output"],
+    ) + num(um, &["reasoning_tokens", "reasoningTokens", "reasoning"]);
     let mut cache_read = num(
         um,
         &[
@@ -405,16 +419,15 @@ fn extract_event(v: &Value, provider: &str, source: &Path) -> Option<UsageEvent>
     // OpenCode records request wall-clock; needed for per-hour pricing
     let duration_ms = v
         .get("time")
-        .and_then(|t| t.get("completed").and_then(Value::as_i64).zip(t.get("created").and_then(Value::as_i64)))
+        .and_then(|t| {
+            t.get("completed")
+                .and_then(Value::as_i64)
+                .zip(t.get("created").and_then(Value::as_i64))
+        })
         .map(|(a, b)| (a - b).max(0) as u64)
         .unwrap_or(0);
 
-    if input == 0
-        && output == 0
-        && cache_read == 0
-        && cache_write == 0
-        && direct_cost.is_none()
-    {
+    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 && direct_cost.is_none() {
         return None;
     }
 
@@ -529,7 +542,10 @@ mod tests {
     #[test]
     fn aggregate_sums_and_sorts_by_cost() {
         let db = price::PriceDB::builtin();
-        let rows = aggregate(&[ev("gpt-5", 1_000_000, 0), ev("gpt-5", 500_000, 100_000)], &db);
+        let rows = aggregate(
+            &[ev("gpt-5", 1_000_000, 0), ev("gpt-5", 500_000, 100_000)],
+            &db,
+        );
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].requests, 2);
         assert_eq!(rows[0].input_tokens, 1_500_000);
@@ -564,5 +580,14 @@ mod tests {
         // OpenRouter-style slug resolves to the same entry
         let p = db.lookup("anthropic/claude-opus-4-1").unwrap();
         assert_eq!(p.input, 15.0);
+    }
+
+    #[test]
+    fn dot_slash_underscore_separators_match() {
+        let db = price::PriceDB::builtin();
+        // OpenRouter slugs use dots; some agents use underscores
+        assert!(db.lookup("anthropic/claude.opus.4.5").is_some());
+        assert!(db.lookup("openai/gpt_5_2").is_some());
+        assert!(db.lookup("zai/glm-5.3").is_some());
     }
 }

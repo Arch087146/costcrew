@@ -8,6 +8,8 @@ pub struct Args {
     pub help: bool,
     pub key: Option<String>,
     pub prices: Option<String>,
+    pub sort: Option<String>,
+    pub top: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,6 +19,7 @@ pub enum Cmd {
     Md,
     Advise,
     Catalog,
+    Leaderboard,
     OpenRouter,
     Fetch,
 }
@@ -31,19 +34,55 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
         help: false,
         key: None,
         prices: None,
+        sort: None,
+        top: 25,
     };
 
     let mut it = argv.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "scan" | "c" if !seen_cmd => { cmd = Cmd::Scan; seen_cmd = true; }
-            "demo" | "d" if !seen_cmd => { cmd = Cmd::Demo; seen_cmd = true; }
-            "md" if !seen_cmd => { cmd = Cmd::Md; seen_cmd = true; }
-            "advise" | "a" if !seen_cmd => { cmd = Cmd::Advise; seen_cmd = true; }
-            "catalog" if !seen_cmd => { cmd = Cmd::Catalog; seen_cmd = true; }
-            "openrouter" | "or" if !seen_cmd => { cmd = Cmd::OpenRouter; seen_cmd = true; }
-            "fetch-prices" if !seen_cmd => { cmd = Cmd::Fetch; seen_cmd = true; }
+            "scan" | "c" if !seen_cmd => {
+                cmd = Cmd::Scan;
+                seen_cmd = true;
+            }
+            "demo" | "d" if !seen_cmd => {
+                cmd = Cmd::Demo;
+                seen_cmd = true;
+            }
+            "md" if !seen_cmd => {
+                cmd = Cmd::Md;
+                seen_cmd = true;
+            }
+            "advise" | "a" if !seen_cmd => {
+                cmd = Cmd::Advise;
+                seen_cmd = true;
+            }
+            "leaderboard" | "lb" | "board" if !seen_cmd => {
+                cmd = Cmd::Leaderboard;
+                seen_cmd = true;
+            }
+            "catalog" if !seen_cmd => {
+                cmd = Cmd::Catalog;
+                seen_cmd = true;
+            }
+            "openrouter" | "or" if !seen_cmd => {
+                cmd = Cmd::OpenRouter;
+                seen_cmd = true;
+            }
+            "fetch-prices" if !seen_cmd => {
+                cmd = Cmd::Fetch;
+                seen_cmd = true;
+            }
             "--json" => args.json = true,
+            "--sort" => {
+                args.sort = Some(it.next().ok_or("--sort needs a value")?.to_string());
+            }
+            "--top" => {
+                let v = it.next().ok_or("--top needs a number")?;
+                args.top = v
+                    .parse()
+                    .map_err(|_| format!("--top must be a number, got {v}"))?;
+            }
             "--help" | "-h" | "help" => args.help = true,
             "--version" | "-V" | "-v" => {
                 println!("costcrew {}", env!("CARGO_PKG_VERSION"));
@@ -99,9 +138,12 @@ USAGE:
     costcrew demo                sample report from synthetic data
     costcrew openrouter          ACTUAL spend for an OpenRouter API key
                                  (env OPENROUTER_API_KEY or --key sk-or-v1-...)
-    costcrew fetch-prices        pull OpenRouter's live price list (~300 models)
+    costcrew fetch-prices        pull OpenRouter's live price list (~460 models)
                                  cached at %LOCALAPPDATA%\\costcrew — all future
                                  scans price against it automatically
+    costcrew leaderboard         arena-style Elo leaderboard, priced for
+                                 agentic token mixes:
+                                 --sort elo|value|price  --top N  --json
     costcrew catalog             which models each agent service offers
 
 FLAGS:

@@ -1,6 +1,6 @@
 [package]
 name = "costcrew"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "See what every AI coding agent actually costs you — tokens, dollars, per repo, per day."
 license = "MIT"
