@@ -224,7 +224,7 @@ fn scan_opencode_db(path: &Path, provider: &str, since_ms: i64, events: &mut Vec
     }
 }
 
-fn walk(dir: &Path, provider: &str, depth: usize, cb: &mut impl FnMut(&Path, SystemTime)) {
+fn walk(dir: &Path, _provider: &str, depth: usize, cb: &mut impl FnMut(&Path, SystemTime)) {
     if depth > 8 {
         return;
     }
@@ -243,7 +243,7 @@ fn walk(dir: &Path, provider: &str, depth: usize, cb: &mut impl FnMut(&Path, Sys
             continue;
         }
         if p.is_dir() {
-            walk(&p, provider, depth + 1, cb);
+            walk(&p, _provider, depth + 1, cb);
         } else if let Ok(meta) = e.metadata() {
             if let Ok(mtime) = meta.modified() {
                 cb(&p, mtime);

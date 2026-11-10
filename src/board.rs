@@ -10,7 +10,7 @@
 //! value = (elo − 1400) / agent_blend  → points per dollar.
 
 use crate::price::PriceDB;
-use crate::report::{BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW};
+use crate::report::{BOLD, DIM, GREEN, RED, RESET, YELLOW};
 
 pub struct BoardEntry {
     /// prefix that must resolve through the price DB
@@ -186,8 +186,8 @@ pub fn print_board(db: &PriceDB, sort: Sort, top: usize, json: bool) {
             _ => "-".into(),
         };
         let color = match value {
-            Some(v) if blend.map_or(false, |blend| blend > 0.0) && v >= 25.0 => GREEN,
-            Some(v) if blend.map_or(false, |blend| blend > 0.0) && v >= 8.0 => YELLOW,
+            Some(v) if blend.is_some_and(|blend| blend > 0.0) && v >= 25.0 => GREEN,
+            Some(v) if blend.is_some_and(|blend| blend > 0.0) && v >= 8.0 => YELLOW,
             _ if value.is_some() => RED,
             _ => DIM,
         };
@@ -205,11 +205,9 @@ pub fn print_board(db: &PriceDB, sort: Sort, top: usize, json: bool) {
         );
     }
 
-    if rows.iter().all(|(_, _, _)| true) {
-        if rows.iter().any(|(_, blend, _)| blend.is_none()) {
-            println!();
-            println!("  {DIM}? = model not in your price sources yet. `costcrew fetch-prices` may fix it.{RESET}");
-        }
+    if rows.iter().all(|(_, _, _)| true) && rows.iter().any(|(_, blend, _)| blend.is_none()) {
+        println!();
+        println!("  {DIM}? = model not in your price sources yet. `costcrew fetch-prices` may fix it.{RESET}");
     }
     println!();
     println!(

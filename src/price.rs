@@ -140,7 +140,7 @@ impl PriceDB {
             let hit = seg.starts_with(&p) || full.starts_with(&p);
             if hit {
                 let len = p.len();
-                if best.map_or(true, |(l, _)| len > l) {
+                if best.is_none_or(|(l, _)| len > l) {
                     best = Some((len, e.price));
                 }
             }

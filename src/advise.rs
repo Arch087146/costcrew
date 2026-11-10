@@ -115,11 +115,12 @@ pub fn print_advise(rows: &[Row], db: &PriceDB, since_days: u32) {
                 "higher tier"
             };
             println!(
-                "  {YELLOW}{:>30}{RESET}  ->  {GREEN}{:<22}{RESET} {DIM}({} · {}){RESET}",
+                "  {YELLOW}{:>30}{RESET}  ->  {GREEN}{:<22}{RESET} {DIM}({} · probable save ${:.2} ({:.0}%)){RESET}",
                 truncate(&r.model, 30),
                 alt_name,
                 tier_note,
-                format!("probable save ${:.2} ({:.0}%)", save, pct)
+                save,
+                pct
             );
             println!(
                 "  {:>30}  {DIM}   same work would have cost ${:.2} instead of ${:.2}{RESET}",

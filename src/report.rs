@@ -100,7 +100,7 @@ pub fn print_table(rows: &[Row], since_days: u32, totals: &Totals) {
         for r in rows.iter().filter(|r| r.known_price) {
             let scale = ((r.cost / max) * 24.0).round() as usize;
             let units = if r.cost > 0.0 { scale.max(1) } else { 0 };
-            let bar: String = std::iter::repeat('#').take(units).collect();
+            let bar: String = std::iter::repeat_n('#', units).collect();
             let color = cost_color(r.cost);
             println!(
                 "  {:>26} {color}{bar}{RESET} ${:.2}",
