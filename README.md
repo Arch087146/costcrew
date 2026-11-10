@@ -113,6 +113,17 @@ suggest a downgrade it can't back with your own measured spend. The last line is
 baked in: "run one task as an A/B and compare before rewiring your whole
 workflow."
 
+## Subscriptions: the price displayed is list price
+
+One honest caveat up front: if your agent runs on a **subscription** (Claude Code
+Pro/Max, Cursor Pro, Copilot), those tokens cost you *zero marginal dollars* —
+costcrew still shows what the same usage would have billed per-token, because
+that's the common denominator across every tool it scans. Read subscription
+values as "what this session would cost at list price," not "what you'll owe."
+
+API keys, OpenRouter credits, and rented GPUs do map 1:1 to dollars, which is
+where the totals get literal.
+
 ## Is the leaderboard crown worth its price?
 
 `costcrew leaderboard` answers what arena.ai can't: quality **and** the bill.
