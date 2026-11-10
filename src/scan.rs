@@ -1,6 +1,6 @@
 //! Scans local logs/transcripts of AI coding agents for token usage.
 
-use crate::price::{self, Pricing};
+use crate::price;
 use serde_json::Value;
 use std::ffi::OsStr;
 use std::fs::{self, File};
@@ -16,6 +16,10 @@ pub struct UsageEvent {
     pub output_tokens: u64,
     pub cache_read: u64,
     pub cache_write: u64,
+    /// wall-clock of the request, when the log records it (opencode does)
+    pub duration_ms: u64,
+    /// when the agent itself reports a cost (Kilo/Cline/Roo do), USD
+    pub direct_cost: Option<f64>,
     #[allow(dead_code)]
     pub source: PathBuf,
 }
@@ -30,6 +34,8 @@ pub struct Row {
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
     pub cache_tokens: u64,
+    pub duration_secs: f64,
+    pub direct_cost_sum: f64,
     pub cost: f64,
     pub known_price: bool,
 }
@@ -58,6 +64,23 @@ fn scan_targets() -> Vec<(PathBuf, &'static str)> {
     ));
     if let Some(lad) = std::env::var_os("LOCALAPPDATA") {
         targets.push((PathBuf::from(lad).join("opencode"), "opencode"));
+    }
+    // Cline-family VS Code agents (Kilo Code, Cline, Roo Code) log tasks here.
+    // Prefer APPDATA (where VS Code globalStorage actually lives); fall back to
+    // LOCALAPPDATA's parent so the scanner still runs on unusual setups.
+    let mut gs: Option<PathBuf> = std::env::var_os("APPDATA").map(|a| {
+        PathBuf::from(a).join("Code").join("User").join("globalStorage")
+    });
+    if gs.is_none() {
+        gs = std::env::var_os("LOCALAPPDATA").map(|l| {
+            PathBuf::from(&l)
+                .parent()
+                .map(|p| p.join("Roaming").join("Code").join("User").join("globalStorage"))
+                .unwrap_or_else(|| PathBuf::from(&l))
+        });
+    }
+    if let Some(gs) = gs {
+        targets.push((gs, "cline-family"));
     }
     // Codex CLI session logs
     targets.push((h.join(".codex"), "codex"));
@@ -92,7 +115,60 @@ pub fn collect(since_days: u32) -> Vec<UsageEvent> {
             }
         });
     }
+
+    // Aider: cost lines in its chat history markdown
+    scan_aider_history(since_days, &mut events);
     events
+}
+
+/// Aider appends "> Cost: $a ask, $b send, $c total." lines to history .md files.
+/// We trust its own numbers (one event per history line).
+fn scan_aider_history(since_days: u32, events: &mut Vec<UsageEvent>) {
+    let h = home();
+    for name in [".aider.chat.history.md", ".aider.history.md"] {
+        let path = h.join(name);
+        let Ok(meta) = fs::metadata(&path) else { continue };
+        let Ok(mtime) = meta.modified() else { continue };
+        if let Ok(age) = SystemTime::now().duration_since(mtime) {
+            if age > Duration::from_secs(since_days as u64 * 86_400) {
+                continue;
+            }
+        }
+        let Ok(text) = fs::read_to_string(&path) else { continue };
+        for line in text.lines() {
+            if !line.contains("Cost:") {
+                continue;
+            }
+            // take the largest $ figure on the line (usually the total)
+            let mut biggest = 0.0f64;
+            let mut start = 0;
+            while let Some(i) = line[start..].find('$') {
+                let rest = &line[start + i + 1..];
+                let num: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit() || *c == '.')
+                    .collect();
+                if let Ok(v) = num.parse::<f64>() {
+                    biggest = biggest.max(v);
+                }
+                start += i + 1 + num.len();
+                if start >= line.len() {
+                    break;
+                }
+            }
+            if biggest <= 0.0 {
+                continue;
+            }
+            events.push(UsageEvent {
+                provider: "aider".into(),
+                model: "aider-reported".into(),
+                duration_ms: 0,
+                direct_cost: Some(biggest),
+                source: path.clone(),
+                ..Default::default()
+            });
+        }
+    }
 }
 
 fn now_ms() -> i64 {
@@ -184,15 +260,65 @@ fn parse_single_json(path: &Path, provider: &str, events: &mut Vec<UsageEvent>) 
     let Ok(text) = fs::read_to_string(path) else {
         return;
     };
-    if text.len() > 4_000_000 {
+    if text.len() > 8_000_000 {
         return;
     }
-    // OpenCode legacy storage is one JSON object per message file.
     let Ok(v) = serde_json::from_str::<Value>(&text) else {
         return;
     };
-    if let Some(ev) = extract_event(&v, provider, path) {
-        events.push(ev);
+    match &v {
+        // Cline-family ui_messages/task files are arrays
+        Value::Array(items) => {
+            for item in items {
+                if let Some(ev) = extract_event(item, provider, path) {
+                    events.push(ev);
+                }
+                dig_for_cline_usage(item, provider, path, events, 0);
+            }
+        }
+        Value::Object(_) => {
+            if let Some(ev) = extract_event(&v, provider, path) {
+                events.push(ev);
+            }
+            dig_for_cline_usage(&v, provider, path, events, 0);
+        }
+        _ => {}
+    }
+}
+
+/// Kilo Code / Cline / Roo Code wrap per-request cost JSON inside string
+/// fields ("text") inside their task files — unwrap those one level.
+fn dig_for_cline_usage(
+    v: &Value,
+    provider: &str,
+    path: &Path,
+    events: &mut Vec<UsageEvent>,
+    depth: usize,
+) {
+    if depth > 4 {
+        return;
+    }
+    match v {
+        Value::Array(items) => {
+            for i in items {
+                dig_for_cline_usage(i, provider, path, events, depth + 1);
+            }
+        }
+        Value::Object(map) => {
+            for val in map.values() {
+                dig_for_cline_usage(val, provider, path, events, depth + 1);
+            }
+            if let Some(Value::String(s)) = map.get("text") {
+                if s.contains("tokensIn") || s.contains("cacheReads") || s.contains("\"cost\"") {
+                    if let Ok(inner) = serde_json::from_str::<Value>(s) {
+                        if let Some(ev) = extract_event(&inner, provider, path) {
+                            events.push(ev);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -238,15 +364,16 @@ fn extract_event(v: &Value, provider: &str, source: &Path) -> Option<UsageEvent>
 
     let um = usage.as_object()?;
 
-    let input = num(um, &["input_tokens", "inputTokens", "input"]);
+    let input = num(um, &["input_tokens", "inputTokens", "tokensIn", "input"]);
     // reasoning tokens are billed as output on most APIs — fold them in
-    let output = num(um, &["output_tokens", "outputTokens", "output"])
+    let output = num(um, &["output_tokens", "outputTokens", "tokensOut", "output"])
         + num(um, &["reasoning_tokens", "reasoningTokens", "reasoning"]);
     let mut cache_read = num(
         um,
         &[
             "cache_read_input_tokens",
             "cacheReadTokens",
+            "cacheReads",
             "cache_read",
             "cacheRead",
         ],
@@ -256,6 +383,7 @@ fn extract_event(v: &Value, provider: &str, source: &Path) -> Option<UsageEvent>
         &[
             "cache_creation_input_tokens",
             "cacheWriteTokens",
+            "cacheWrites",
             "cache_creation",
             "cacheWrite",
         ],
@@ -267,7 +395,26 @@ fn extract_event(v: &Value, provider: &str, source: &Path) -> Option<UsageEvent>
         cache_write = cache_write.max(num(c, &["write", "cacheWrite"]));
     }
 
-    if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 {
+    // Cline-family: agent-reported USD cost of the request
+    let direct_cost = v
+        .get("cost")
+        .or_else(|| um.get("cost"))
+        .and_then(fnum)
+        .filter(|c| *c > 0.0);
+
+    // OpenCode records request wall-clock; needed for per-hour pricing
+    let duration_ms = v
+        .get("time")
+        .and_then(|t| t.get("completed").and_then(Value::as_i64).zip(t.get("created").and_then(Value::as_i64)))
+        .map(|(a, b)| (a - b).max(0) as u64)
+        .unwrap_or(0);
+
+    if input == 0
+        && output == 0
+        && cache_read == 0
+        && cache_write == 0
+        && direct_cost.is_none()
+    {
         return None;
     }
 
@@ -278,11 +425,22 @@ fn extract_event(v: &Value, provider: &str, source: &Path) -> Option<UsageEvent>
         output_tokens: output,
         cache_read,
         cache_write,
+        duration_ms,
+        direct_cost,
         source: source.to_path_buf(),
     })
 }
 
-pub fn aggregate(events: &[UsageEvent]) -> Vec<Row> {
+/// numbers that arrive as strings (Cline serializes tons as strings)
+fn fnum(v: &Value) -> Option<f64> {
+    match v {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.trim().parse().ok(),
+        _ => None,
+    }
+}
+
+pub fn aggregate(events: &[UsageEvent], db: &price::PriceDB) -> Vec<Row> {
     let mut rows: Vec<Row> = Vec::new();
     let bump = |r: &mut Row, e: &UsageEvent| {
         r.requests += 1;
@@ -291,6 +449,10 @@ pub fn aggregate(events: &[UsageEvent]) -> Vec<Row> {
         r.cache_read_tokens += e.cache_read;
         r.cache_write_tokens += e.cache_write;
         r.cache_tokens += e.cache_read + e.cache_write;
+        r.duration_secs += e.duration_ms as f64 / 1000.0;
+        if let Some(c) = e.direct_cost {
+            r.direct_cost_sum += c;
+        }
     };
     for e in events {
         if let Some(r) = rows
@@ -308,18 +470,35 @@ pub fn aggregate(events: &[UsageEvent]) -> Vec<Row> {
                 cache_read_tokens: e.cache_read,
                 cache_write_tokens: e.cache_write,
                 cache_tokens: e.cache_read + e.cache_write,
+                duration_secs: e.duration_ms as f64 / 1000.0,
+                direct_cost_sum: e.direct_cost.unwrap_or(0.0),
                 cost: 0.0,
                 known_price: false,
             });
         }
     }
     for r in &mut rows {
-        let p: Pricing = price::lookup(&r.model);
-        r.known_price = p.input + p.output > 0.0;
-        r.cost = (r.input_tokens as f64 / 1e6) * p.input
-            + (r.output_tokens as f64 / 1e6) * p.output
-            + (r.cache_read_tokens as f64 / 1e6) * p.cache_read
-            + (r.cache_write_tokens as f64 / 1e6) * p.cache_write;
+        // 1) agent-reported costs win (Kilo/Cline/Roo say the price themselves)
+        if r.direct_cost_sum > 0.0 {
+            r.known_price = true;
+            r.cost = r.direct_cost_sum;
+            continue;
+        }
+        // 2) token + wall-clock pricing from the database
+        match db.lookup(&r.model) {
+            Some(p) => {
+                r.known_price = true;
+                r.cost = (r.input_tokens as f64 / 1e6) * p.input
+                    + (r.output_tokens as f64 / 1e6) * p.output
+                    + (r.cache_read_tokens as f64 / 1e6) * p.cache_read
+                    + (r.cache_write_tokens as f64 / 1e6) * p.cache_write
+                    + p.per_hour * (r.duration_secs / 3600.0);
+            }
+            None => {
+                r.known_price = false;
+                r.cost = 0.0;
+            }
+        }
     }
     rows.sort_by(|a, b| {
         b.cost
@@ -341,13 +520,16 @@ mod tests {
             output_tokens: o,
             cache_read: 0,
             cache_write: 0,
+            duration_ms: 0,
+            direct_cost: None,
             source: "t".into(),
         }
     }
 
     #[test]
     fn aggregate_sums_and_sorts_by_cost() {
-        let rows = aggregate(&[ev("gpt-5", 1_000_000, 0), ev("gpt-5", 500_000, 100_000)]);
+        let db = price::PriceDB::builtin();
+        let rows = aggregate(&[ev("gpt-5", 1_000_000, 0), ev("gpt-5", 500_000, 100_000)], &db);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].requests, 2);
         assert_eq!(rows[0].input_tokens, 1_500_000);
@@ -356,16 +538,31 @@ mod tests {
 
     #[test]
     fn unknown_models_are_flagged_not_billed() {
-        let rows = aggregate(&[ev("totally-made-up-model", 1_000_000, 1_000)]);
+        let db = price::PriceDB::builtin();
+        let rows = aggregate(&[ev("totally-made-up-model", 1_000_000, 1_000)], &db);
         assert!(!rows[0].known_price);
         assert_eq!(rows[0].cost, 0.0);
     }
 
     #[test]
+    fn agent_reported_cost_wins_over_estimate() {
+        let db = price::PriceDB::builtin();
+        let mut e = ev("gpt-5", 1_000_000, 0);
+        e.direct_cost = Some(0.42);
+        let rows = aggregate(&[e], &db);
+        assert!(rows[0].known_price);
+        assert!((rows[0].cost - 0.42).abs() < 1e-9);
+    }
+
+    #[test]
     fn pricing_prefix_match_hits_longest() {
-        let p = price::lookup("claude-opus-4-5-20990101");
+        let db = price::PriceDB::builtin();
+        let p = db.lookup("claude-opus-4-5-20990101").unwrap();
         assert_eq!(p.input, 15.0);
-        let p = price::lookup("glm-4-air");
+        let p = db.lookup("glm-4-air").unwrap();
         assert_eq!(p.input, 0.6);
+        // OpenRouter-style slug resolves to the same entry
+        let p = db.lookup("anthropic/claude-opus-4-1").unwrap();
+        assert_eq!(p.input, 15.0);
     }
 }

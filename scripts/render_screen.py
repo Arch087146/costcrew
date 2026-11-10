@@ -134,6 +134,13 @@ def main():
     out_path = Path(sys.argv[1])
     out_path.parent.mkdir(exist_ok=True)
     title = sys.argv[2]
+
+    max_lines = None
+    if "--max-lines" in sys.argv:
+        i = sys.argv.index("--max-lines")
+        max_lines = int(sys.argv[i + 1])
+        del sys.argv[i : i + 2]
+
     run_args = sys.argv[sys.argv.index("--") + 1 :]
 
     proc = subprocess.run(
@@ -152,6 +159,10 @@ def main():
     ]
     cells = prompt + tokenize_ansi(body)
     rows = split_rows(cells)
+    if max_lines:
+        rows = rows[: max_lines + 1]  # prompt row + N body rows
+        rows.append([])  # ellipsis hint line
+        rows.append([(DIM, False, ch) for ch in "  ... (full output with `costcrew catalog`)"])
     render(rows[1:], rows[0], out_path, title)
 
 

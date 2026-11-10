@@ -19,17 +19,22 @@ it shows what it found but refuses to invent a price.
 |---|---|---|
 | OpenCode | `opencode.db` (SQLite message table, legacy JSON storage) | ✅ |
 | Claude Code | `~/.claude/**/*.jsonl` transcripts | ✅ |
-| Codex CLI | `~/.codex/sessions/**/*.jsonl` | ✅ best-effort |
+| Kilo Code | VS Code globalStorage task logs | ✅ best-effort |
+| Cline | VS Code globalStorage task logs (incl. agent-reported costs) | ✅ best-effort |
+| Roo Code | VS Code globalStorage task logs | ✅ best-effort |
+| Aider | cost lines in `~/.aider*.history.md` | ✅ |
+| Codex CLI | `~/.codex/sessions` JSONL | ✅ best-effort |
+| Gemini CLI, Cursor, Windsurf, Copilot | — | roadmap |
 
 Everything is read **read-only** — the SQLite connection is opened `READ_ONLY`, and
 no log file is ever touched. costcrew only ever reads files newer than `--since`.
 
 Here it is five minutes after `cargo install`, reading a real OpenCode database —
-note it found 325 requests for a model it has no price for and *scaled the unknown
-model honestly* instead of making a number up:
+note it found 285 requests for a model it has no price for and *didn't bill the
+unknown model* instead of making a number up:
 
 <p align="center">
-  <img src="assets/scan.png" alt="costcrew scanning a real OpenCode database — 325 requests, unpriced model shown with a question mark" width="620">
+  <img src="assets/scan.png" alt="costcrew scanning a real OpenCode database — 285 requests, unpriced model shown with a question mark" width="620">
 </p>
 
 ## Install
@@ -56,7 +61,66 @@ costcrew demo            # sample report from synthetic data, no scanning needed
 And `--help`, for people who judge CLIs by their help text:
 
 <p align="center">
-  <img src="assets/help.png" alt="costcrew --help output" width="580">
+  <img src="assets/help.png" alt="costcrew --help output" width="640">
+</p>
+
+## Price EVERYTHING: subscriptions, API keys, and rented GPUs
+
+Three pricing sources, merged, longest-prefix wins:
+
+1. **Built-in table** (`src/price.rs`) — curated list prices for Claude, OpenAI,
+   Google, GLM/Zhipu, DeepSeek, Qwen, Kimi, Grok, Llama, Mistral, MiniMax, Cohere
+   and friends. OpenRouter-style slugs (`anthropic/claude-...`) match too.
+2. **Live OpenRouter list** — `costcrew fetch-prices` pulls **all ~465 OpenRouter
+   models** (including `:free` tiers) and caches them in
+   `%LOCALAPPDATA%\costcrew`. Every later scan prices against them automatically.
+   No API key needed — it's a public endpoint.
+3. **Your own overrides** — `--prices prices.json` for anything else:
+
+```json
+{
+  "prices": [
+    { "prefix": "big-pickle", "input": 0.25, "output": 0.95, "cache_read": 0.13 },
+    { "prefix": "local/qwen3-32b", "per_hour": 2.19 }
+  ]
+}
+```
+
+`per_hour` is how you bill **rented GPUs / self-hosted inference** — costcrew
+computes wall-clock per request from OpenCode's session timestamps (hourly rate ×
+time actually spent) and adds it to the token bill.
+Local models with no price are shown with `?` and excluded from totals — never
+invented.
+
+### Paying by API key instead of a subscription?
+
+`costcrew openrouter` (with `OPENROUTER_API_KEY` set, or `--key`) asks OpenRouter
+how much each model actually cost on your key — provider-reported truth, per
+model, not an estimate.
+
+## Should you have used a cheaper model?
+
+`costcrew advise` recomputes your **actual token mix** (input/out/cache ratios
+included) on every comparable model at the same or better benchmark tier, and
+flags probable waste — today's most common answer is "carrier-tier sticker shock":
+
+<p align="center">
+  <img src="assets/advise.png" alt="costcrew advise suggesting cheaper same-tier models with estimated savings" width="760">
+</p>
+
+It's a heuristic — quality tiers come from public coding evals, and it refuses to
+suggest a downgrade it can't back with your own measured spend. The last line is
+baked in: "run one task as an A/B and compare before rewiring your whole
+workflow."
+
+## Which agent runs on what?
+
+`costcrew catalog` prints the lay of the land — every coding agent's billing
+model (subscription vs BYOK vs free tier), its model menu, and whether costcrew
+can read its logs:
+
+<p align="center">
+  <img src="assets/catalog.png" alt="costcrew catalog listing billing and models of Claude Code, OpenCode, Cline, Kilo Code, Aider, Cursor and more" width="720">
 </p>
 
 ## Pricing

@@ -12,6 +12,8 @@ pub fn demo_events() -> Vec<UsageEvent> {
             output_tokens: o,
             cache_read: cr,
             cache_write: cw,
+            duration_ms: 0,
+            direct_cost: None,
             source: "demo".into(),
         }
     }
@@ -65,11 +67,13 @@ pub fn demo_events() -> Vec<UsageEvent> {
         // Codex quick sessions
         ev("codex", "gpt-5.2-codex", 12_000, 2_400, 410_000, 80_000),
         ev("codex", "gpt-5.2-codex", 8_000, 1_600, 260_000, 51_000),
+        // deepseek via an API key (Kilo Code / OpenRouter lane)
+        ev("kilo", "deepseek-chat", 33_000, 7_200, 640_000, 96_000),
         // one model we don't have a price for
         ev("opencode", "mystery-coder-xl", 30_000, 8_000, 0, 10_000),
     ]
 }
 
-pub fn demo_rows() -> Vec<Row> {
-    aggregate(&demo_events())
+pub fn demo_rows(db: &super::price::PriceDB) -> Vec<Row> {
+    aggregate(&demo_events(), db)
 }

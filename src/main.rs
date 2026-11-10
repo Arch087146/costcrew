@@ -1,11 +1,15 @@
+mod advise;
 mod args;
+mod catalog;
 mod demo;
+mod fetch;
 mod price;
 mod report;
 mod scan;
 
 use args::{parse, Cmd};
-use report::{print_markdown, print_table, Totals};
+use price::PriceDB;
+use report::{print_markdown, print_table, Totals, BOLD, DIM, RESET};
 use scan::{aggregate, collect};
 
 fn main() {
@@ -19,22 +23,62 @@ fn main() {
     };
 
     match args.cmd {
-        Cmd::Demo => run(demo::demo_rows(), args, 7),
-        Cmd::Scan | Cmd::Md => {
+        Cmd::Demo => {
+            let db = PriceDB::builtin();
+            run(demo::demo_rows(&db), args, 7, &db);
+        }
+        Cmd::Catalog => catalog::print_catalog(),
+        Cmd::OpenRouter => {
+            run_openrouter(&args);
+        }
+        Cmd::Fetch => {
+            println!("fetching OpenRouter price list ...");
+            match fetch::force_refresh() {
+                Ok(n) => println!(
+                    "cached {} models to {}\nnext `costcrew` run prices against them automatically",
+                    n,
+                    fetch::cache_dir().join("openrouter-prices.json").display()
+                ),
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Cmd::Scan | Cmd::Md | Cmd::Advise => {
+            let mut db = PriceDB::builtin();
+            fetch::cached_into_db(&mut db);
+            if let Some(path) = &args.prices {
+                load_custom(&mut db, path);
+            }
             let events = collect(args.since_days);
             if events.is_empty() {
+                if args.cmd == Cmd::Advise {
+                    // advise is understood without a scan — show it on demo data
+                    let db = PriceDB::builtin();
+                    println!("  {DIM}(no local usage found — showing advise on demo data){RESET}");
+                    advise::print_advise(&demo::demo_rows(&db), &db, 7);
+                    return;
+                }
                 eprintln!("no agent usage found on this machine.");
-                eprintln!("scanned ~/.claude, opencode data dirs, ~/.codex");
+                eprintln!("scanned ~/.claude, opencode data dirs, ~/.codex, vscode globalStorage, aider history");
                 eprintln!("try `costcrew demo` to see a sample report.");
                 std::process::exit(1);
             }
             let days = args.since_days;
-            run(aggregate(&events), args, days);
+            let rows = aggregate(&events, &db);
+            if args.cmd == Cmd::Advise && !rows.iter().any(|r| r.known_price) {
+                // advise is understood without priced scans — show it on demo data
+                println!("{DIM}(no priced usage found locally — showing advise on demo data){RESET}");
+                advise::print_advise(&demo::demo_rows(&db), &db, 7);
+                return;
+            }
+            run(rows, args, days, &db);
         }
     }
 }
 
-fn run(rows: Vec<scan::Row>, args: args::Args, since_days: u32) {
+fn run(rows: Vec<scan::Row>, args: args::Args, since_days: u32, db: &PriceDB) {
     let total_cost: f64 = rows.iter().filter(|r| r.known_price).map(|r| r.cost).sum();
     let total_requests: u64 = rows.iter().map(|r| r.requests).sum();
     let unknown_models = rows.iter().filter(|r| !r.known_price).count();
@@ -51,8 +95,106 @@ fn run(rows: Vec<scan::Row>, args: args::Args, since_days: u32) {
 
     match args.cmd {
         Cmd::Md => print_markdown(&rows, since_days, &totals),
+        Cmd::Advise => advise::print_advise(&rows, db, since_days),
         _ => print_table(&rows, since_days, &totals),
     }
+}
+
+fn run_openrouter(args: &args::Args) {
+    let key = args
+        .key
+        .clone()
+        .or_else(|| std::env::var("OPENROUTER_API_KEY").ok())
+        .unwrap_or_else(|| {
+            eprintln!("error: set OPENROUTER_API_KEY or pass --key sk-or-v1-...");
+            std::process::exit(2);
+        });
+
+    println!("querying OpenRouter activity (limit 200) ...");
+    match fetch::activity(&key) {
+        Ok(rows) if rows.is_empty() => println!("no recorded spend — nothing on this key yet."),
+        Ok(rows) => {
+            println!();
+            println!("  {BOLD}costcrew{RESET} {DIM}· OPENROUTER actual spend (API key){RESET}");
+            println!();
+            println!("  {:>40}  {:>6}  {:>10}", "model", "reqs", "cost usd");
+            println!("  {}:{}", "-".repeat(40), "-".repeat(19));
+            let total: f64 = rows.iter().map(|(_, _, c)| c).sum();
+            for (model, reqs, cost) in &rows {
+                println!(
+                    "  {:>40}  {:>6}  {:>10.4}",
+                    if model.len() > 40 { &model[..40] } else { model },
+                    reqs,
+                    cost
+                );
+            }
+            println!("  {:>40}  {:>6}  {:>10.4}", "TOTAL", "", total);
+            println!();
+            println!("  {DIM}this is act bill-truth from the provider — the scan is the estimate.{RESET}");
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn load_custom(db: &mut PriceDB, path: &str) {
+    use serde_json::Value;
+    let Ok(text) = std::fs::read_to_string(path) else {
+        eprintln!("error: can't read {path}");
+        std::process::exit(2);
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        eprintln!("error: {path} is not valid JSON");
+        std::process::exit(2);
+    };
+    let n = match v.get("prices") {
+        Some(list) => load_list(db, list),
+        None => {
+            if v.is_array() {
+                load_list(db, &v)
+            } else {
+                0
+            }
+        }
+    };
+    db.custom_count = n;
+    println!("using {n} custom price entr{} from {path}", if n == 1 { "y" } else { "ies" });
+}
+
+fn load_list(db: &mut PriceDB, list: &serde_json::Value) -> usize {
+    let mut n = 0;
+    if let Some(items) = list.as_array() {
+        for it in items {
+            let prefix = match it.get("prefix").and_then(serde_json::Value::as_str) {
+                Some(p) => p,
+                None => continue,
+            };
+            let get = |k: &str| {
+                it.get(k)
+                    .and_then(serde_json::Value::as_f64)
+                    .or_else(|| {
+                        it.get(k)
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(|s| s.trim().parse().ok())
+                    })
+                    .unwrap_or(0.0)
+            };
+            db.push(
+                prefix,
+                price::Pricing {
+                    input: get("input"),
+                    output: get("output"),
+                    cache_read: get("cache_read"),
+                    cache_write: get("cache_write"),
+                    per_hour: get("per_hour"),
+                },
+            );
+            n += 1;
+        }
+    }
+    n
 }
 
 fn print_json(rows: &[scan::Row], t: &Totals) {
@@ -67,6 +209,7 @@ fn print_json(rows: &[scan::Row], t: &Totals) {
                 "input_tokens": r.input_tokens,
                 "output_tokens": r.output_tokens,
                 "cache_tokens": r.cache_tokens,
+                "duration_secs": (r.duration_secs * 10.0).round() / 10.0,
                 "cost_usd": if r.known_price { serde_json::Value::from((r.cost * 10_000.0).round() / 10_000.0) } else { serde_json::Value::Null },
             })
         })
