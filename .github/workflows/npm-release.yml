@@ -49,14 +49,30 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: download release assets
+      - name: download release assets (waits for Release to finish)
         if: steps.tok.outputs.have_token == 'true'
         run: |
           mkdir -p dist
-          for a in costcrew-linux-x86_64.tar.gz costcrew-macos-aarch64.tar.gz \
-                   costcrew-macos-x86_64.tar.gz costcrew-windows-x86_64.zip; do
-            curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.ver.outputs.tag }}/${a}" -o "dist/${a}"
+          assets="costcrew-linux-x86_64.tar.gz costcrew-macos-aarch64.tar.gz costcrew-macos-x86_64.tar.gz costcrew-windows-x86_64.zip"
+          TAG="${{ steps.ver.outputs.tag }}"
+          fetch() {
+            for a in $assets; do
+              if [ ! -s "dist/$a" ]; then
+                # 404 if Release hasn't uploaded yet — retry later, never
+                # leave a partial file behind
+                curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${a}" -o "dist/$a.part" \
+                  && mv "dist/$a.part" "dist/$a" || rm -f "dist/$a.part"
+              fi
+            done
+            for a in $assets; do [ -s "dist/$a" ] || return 1; done
+          }
+          fetch && exit 0
+          for i in $(seq 1 120); do  # Release builds take a few minutes
+            sleep 10
+            fetch && exit 0
           done
+          echo "::error::release assets for ${TAG} not found after 20 minutes"
+          exit 1
 
       - name: assemble + publish platform packages
         if: steps.tok.outputs.have_token == 'true'
