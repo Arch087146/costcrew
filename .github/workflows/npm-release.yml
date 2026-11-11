@@ -23,9 +23,19 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - name: version → tag
+      - name: resolve version + tag
         id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            # manual dispatch from a branch: fall back to the latest release
+            TAG="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: check for NPM_TOKEN
         id: tok
@@ -45,7 +55,7 @@ jobs:
           mkdir -p dist
           for a in costcrew-linux-x86_64.tar.gz costcrew-macos-aarch64.tar.gz \
                    costcrew-macos-x86_64.tar.gz costcrew-windows-x86_64.zip; do
-            curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${a}" -o "dist/${a}"
+            curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.ver.outputs.tag }}/${a}" -o "dist/${a}"
           done
 
       - name: assemble + publish platform packages
