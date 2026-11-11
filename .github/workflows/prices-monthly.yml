@@ -1,0 +1,58 @@
+# Refresh data/prices.json monthly so the bundled price database
+# ships fresh. Runs on the 3rd of each month + manual dispatch.
+# If OpenRouter returned anything new, it commits directly to main.
+name: prices-monthly
+
+on:
+  schedule:
+    - cron: "17 5 3 * *" # 05:17 UTC, 3rd of the month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch live OpenRouter catalog
+        run: |
+          python3 - <<'EOF'
+          import json, time, urllib.request
+          url = "https://openrouter.ai/api/v1/models"
+          with urllib.request.urlopen(url, timeout=30) as r:
+              v = json.load(r)
+          models = []
+          for m in v.get("data", []):
+              p = m.get("pricing", {})
+              f = lambda k: float(p.get(k) or 0) * 1_000_000
+              models.append({
+                  "id": m.get("id"),
+                  "prompt": f("prompt"),
+                  "completion": f("completion"),
+                  "cache_read": f("input_cache_read"),
+                  "cache_write": f("input_cache_write"),
+              })
+          doc = {
+              "version": 1,
+              "fetched_at_ms": int(time.time() * 1000),
+              "models": [m for m in models if m["id"]],
+          }
+          with open("data/prices.json", "w") as fh:
+              json.dump(doc, fh)
+          print("models:", len(doc["models"]))
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "costcrew-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/prices.json
+          if git diff --cached --quiet; then
+            echo "no price changes"
+          else
+            git commit -m "prices: monthly refresh from OpenRouter ($(date -u +%Y-%m-%d))"
+            git push
+          fi

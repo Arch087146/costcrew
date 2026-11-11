@@ -1,19 +1,112 @@
 # costcrew
 
-**Find out what your AI coding agents *actually* cost you.**
+**The AI coding price database — plus what *you* spend on it.**
 
-Desktop dashboards hide it behind your subscription. costcrew reads the usage logs
-already sitting on your machine, applies per-model prices, and prints the bill —
-per model, in dollars, right in your terminal.
+One binary, two halves. First: a bundled database of what every model costs —
+every input/output/cache rate per 1M tokens, works offline, no API key, no
+scanning, nothing to configure. Second: your own spend — recorded by you,
+totaled by month and service, plus provider-reported truth from your API keys.
 
 <p align="center">
-  <img src="assets/demo.png" alt="costcrew demo — a table of AI agent spend per model with a bar chart" width="700">
+  <img src="assets/ui.png" alt="costcrew interactive app — gradient splash screen and arrow-key menu" width="680">
 </p>
 
-That "mystery-coder-xl" row is deliberate: when costcrew doesn't recognize a model,
-it shows what it found but refuses to invent a price.
+Type `costcrew` and you get the app above: splash, menu, arrow keys. All the
+classic one-shot flags still work for scripting (`costcrew scan --json`, etc.).
 
-## What it reads
+## The price database
+
+`data/prices.json` ships **inside the binary** — a full OpenRouter catalog
+snapshot (465 models, refreshed monthly by CI and committed to the repo) merged
+with a curated vendor table. Ask it anything:
+
+```sh
+costcrew prices               # the whole database
+costcrew prices claude        # filter by name
+costcrew prices --sort cheap  # cheapest first (name | price | cheap)
+costcrew prices --json        # machine-readable
+```
+
+<p align="center">
+  <img src="assets/prices.png" alt="costcrew prices claude — bundled database browsed and filtered" width="760">
+</p>
+
+Rules the database lives by:
+
+- **No invented prices.** A free/unpriced model shows `?` and is excluded from
+  totals. Unknown stays unknown.
+- **Precedence is explicit** — curated table → embedded snapshot → on-disk
+  cache → your `--prices` overrides. Later sources win ties, so a fresh
+  `costcrew fetch-prices` beats the bundled snapshot, and your overrides beat
+  everything.
+- **It refreshes itself** — `costcrew fetch-prices` pulls all ~465 live
+  OpenRouter models (public endpoint, no key), and CI re-commits a fresh
+  snapshot monthly so source builds never go stale.
+- **`per_hour` for rented GPUs** — bill wall-clock for self-hosted inference
+  (see overrides below).
+
+## Your spend on AI
+
+The database tells you prices; this tells you what **you** paid. You record the
+money that actually left your account — subscriptions, credit top-ups, GPU
+rentals — and costcrew totals it by month and service:
+
+```sh
+costcrew spend                              # the ledger summary
+costcrew spend add 20 --service "Claude Pro"
+costcrew spend add 25 --service "OpenRouter" --note "credit top-up"
+costcrew spend add 1.84 --service "Vast.ai" --model llama-70b --note "2h @ $0.92/h"
+```
+
+<p align="center">
+  <img src="assets/spend.png" alt="costcrew spend — monthly totals and per-service breakdown of recorded AI payments" width="760">
+</p>
+
+The ledger is a plain JSON file in `%LOCALAPPDATA%\costcrew` — nothing is
+telemetered, nothing leaves your disk. Three views of money, deliberately
+separate:
+
+| view | source | meaning |
+|---|---|---|
+| `costcrew spend` | you record it | what actually left your bank account |
+| `costcrew openrouter` | your API key | provider-reported, per-model truth |
+| `costcrew scan` | local logs (optional) | per-token *estimate* of your usage |
+
+## Install
+
+```sh
+# from source (Rust 1.80+)
+git clone https://github.com/Arch087146/costcrew
+cargo install --path costcrew
+```
+
+Prebuilt binaries land on the [Releases](https://github.com/Arch087146/costcrew/releases)
+page when a tag is pushed. No runtime dependencies — the database travels with
+the binary.
+
+## Usage
+
+```sh
+costcrew                     # the interactive app (splash + arrow-key menu)
+costcrew prices claude       # browse the database, filtered
+costcrew spend               # your recorded payments, totaled
+costcrew leaderboard         # arena Elo, priced — elo-per-dollar value sort
+costcrew catalog             # which agent ships with which models
+costcrew scan --since 7d     # optional: estimate from local agent logs
+costcrew md > spend.md       # shareable markdown report
+costcrew --json              # machine-readable, pipe anywhere
+```
+
+And `--help`, for people who judge CLIs by their help text:
+
+<p align="center">
+  <img src="assets/help.png" alt="costcrew --help output" width="640">
+</p>
+
+## Optional: estimate from local agent logs
+
+If you *also* want a per-token estimate of what you used — independent of how
+you pay — `costcrew scan` reads local logs, read-only:
 
 | Tool | Source | Status |
 |---|---|---|
@@ -27,76 +120,13 @@ it shows what it found but refuses to invent a price.
 | Gemini CLI, Cursor, Windsurf, Copilot | — | roadmap |
 
 Everything is read **read-only** — the SQLite connection is opened `READ_ONLY`, and
-no log file is ever touched. costcrew only ever reads files newer than `--since`.
-
-Here it is five minutes after `cargo install`, reading a real OpenCode database —
-note it found 285 requests for a model it has no price for and *didn't bill the
-unknown model* instead of making a number up:
+no log file is ever touched. Here it is five minutes after `cargo install`, reading
+a real OpenCode database — note it found 285 requests for a model it has no price
+for and *didn't bill the unknown model* instead of making a number up:
 
 <p align="center">
   <img src="assets/scan.png" alt="costcrew scanning a real OpenCode database — 285 requests, unpriced model shown with a question mark" width="620">
 </p>
-
-## Install
-
-```sh
-# from source (Rust 1.80+)
-git clone https://github.com/Arch087146/costcrew
-cargo install --path costcrew
-```
-
-Prebuilt binaries land on the [Releases](https://github.com/Arch087146/costcrew/releases)
-page when a tag is pushed. No runtime dependencies — everything's read from disk.
-
-## Usage
-
-```sh
-costcrew                 # scan your machine, default lookback 30 days
-costcrew --since 7d      # this week's damage
-costcrew md > spend.md   # shareable markdown table (great for standups or gists)
-costcrew --json          # machine-readable — pipe into a cron, a webhook, whatever
-costcrew demo            # sample report from synthetic data, no scanning needed
-```
-
-And `--help`, for people who judge CLIs by their help text:
-
-<p align="center">
-  <img src="assets/help.png" alt="costcrew --help output" width="640">
-</p>
-
-## Price EVERYTHING: subscriptions, API keys, and rented GPUs
-
-Three pricing sources, merged, longest-prefix wins:
-
-1. **Built-in table** (`src/price.rs`) — curated list prices for Claude, OpenAI,
-   Google, GLM/Zhipu, DeepSeek, Qwen, Kimi, Grok, Llama, Mistral, MiniMax, Cohere
-   and friends. OpenRouter-style slugs (`anthropic/claude-...`) match too.
-2. **Live OpenRouter list** — `costcrew fetch-prices` pulls **all ~465 OpenRouter
-   models** (including `:free` tiers) and caches them in
-   `%LOCALAPPDATA%\costcrew`. Every later scan prices against them automatically.
-   No API key needed — it's a public endpoint.
-3. **Your own overrides** — `--prices prices.json` for anything else:
-
-```json
-{
-  "prices": [
-    { "prefix": "big-pickle", "input": 0.25, "output": 0.95, "cache_read": 0.13 },
-    { "prefix": "local/qwen3-32b", "per_hour": 2.19 }
-  ]
-}
-```
-
-`per_hour` is how you bill **rented GPUs / self-hosted inference** — costcrew
-computes wall-clock per request from OpenCode's session timestamps (hourly rate ×
-time actually spent) and adds it to the token bill.
-Local models with no price are shown with `?` and excluded from totals — never
-invented.
-
-### Paying by API key instead of a subscription?
-
-`costcrew openrouter` (with `OPENROUTER_API_KEY` set, or `--key`) asks OpenRouter
-how much each model actually cost on your key — provider-reported truth, per
-model, not an estimate.
 
 ## Should you have used a cheaper model?
 
@@ -159,13 +189,31 @@ can read its logs:
 
 ## Pricing
 
-Prices live in [`src/price.rs`](src/price.rs) — a plain prefix-match table, longest
-prefix wins, so `claude-opus-4-5-20260115` matches `claude-opus-4`. Costs are
-approximate list prices (no discounts, no pro-plan pooling) and drift — treat the
-totals as ≥85% accurate.
+Prices live in two places: the curated table in
+[`src/price.rs`](src/price.rs) and the embedded catalog
+[`data/prices.json`](data/prices.json) (committed monthly from OpenRouter's
+public endpoint). Lookup is plain prefix-match, longest prefix wins, so
+`claude-opus-4-5-20260115` matches `claude-opus-4`. Costs are approximate list
+prices (no discounts, no pro-plan pooling) and drift — treat the totals as
+≥85% accurate.
 
 Missing your model? Add one line and PR it. Cache reads/writes are priced
 separately where the API exposes them, otherwise the bucket is collapsed.
+
+For anything else — private models, rented GPUs — override with `--prices`:
+
+```json
+{
+  "prices": [
+    { "prefix": "big-pickle", "input": 0.25, "output": 0.95, "cache_read": 0.13 },
+    { "prefix": "local/qwen3-32b", "per_hour": 2.19 }
+  ]
+}
+```
+
+`per_hour` is how you bill **rented GPUs / self-hosted inference** — costcrew
+computes wall-clock per request from OpenCode's session timestamps (hourly rate ×
+time actually spent) and adds it to the token bill.
 
 ## Why a CLI and not a dashboard?
 

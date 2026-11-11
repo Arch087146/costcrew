@@ -16,13 +16,56 @@ pub struct Pricing {
 #[derive(Debug, Clone)]
 pub struct PriceEntry {
     pub prefix: String,
+    /// where this row came from: "curated" | "embedded" | "cache" | "custom"
+    pub src: String,
     pub price: Pricing,
 }
 
 pub struct PriceDB {
     entries: Vec<PriceEntry>,
-    pub fetched_count: usize,
+    pub embedded_count: usize,
+    pub cache_count: usize,
     pub custom_count: usize,
+    pub embedded_fetched_at_ms: u64,
+}
+
+/// The bundled price database: a full OpenRouter catalog snapshot, refreshed
+/// monthly by CI and committed to `data/prices.json`. Ships inside the binary —
+/// every install knows every model's price with zero network, zero scanning.
+const EMBEDDED: &str = include_str!("../data/prices.json");
+
+fn prices_from_doc(v: &serde_json::Value, src: &str, db: &mut PriceDB) -> (usize, u64) {
+    let fetched = v
+        .get("fetched_at_ms")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let mut n = 0usize;
+    if let Some(list) = v.get("models").and_then(serde_json::Value::as_array) {
+        for m in list {
+            let id = match m.get("id").and_then(serde_json::Value::as_str) {
+                Some(s) => s,
+                None => continue,
+            };
+            let get = |k: &str| match m.get(k) {
+                Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+                Some(serde_json::Value::String(s)) => s.trim().parse().unwrap_or(0.0),
+                _ => 0.0,
+            };
+            db.entries.push(PriceEntry {
+                prefix: id.to_string(),
+                src: src.to_string(),
+                price: Pricing {
+                    input: get("prompt"),
+                    output: get("completion"),
+                    cache_read: get("cache_read"),
+                    cache_write: get("cache_write"),
+                    per_hour: 0.0,
+                },
+            });
+            n += 1;
+        }
+    }
+    (n, fetched)
 }
 
 /// (prefix, input, output, cache_read, cache_write) — curated list-price table.
@@ -83,11 +126,26 @@ const TABLE: &[(&str, f64, f64, f64, f64)] = &[
 ];
 
 impl PriceDB {
+    /// Curated vendor list + the full embedded catalog — the "everything" DB.
     pub fn builtin() -> Self {
+        let mut db = Self::curated();
+        let (n, fetched) = prices_from_doc(
+            &serde_json::from_str(EMBEDDED).expect("embedded data/prices.json must parse"),
+            "embedded",
+            &mut db,
+        );
+        db.embedded_count = n;
+        db.embedded_fetched_at_ms = fetched;
+        db
+    }
+
+    /// Just the curated list-price table (used by tests / lean paths).
+    pub fn curated() -> Self {
         let entries = TABLE
             .iter()
             .map(|(prefix, i, o, cr, cw)| PriceEntry {
                 prefix: prefix.to_string(),
+                src: "curated".to_string(),
                 price: Pricing {
                     input: *i,
                     output: *o,
@@ -99,16 +157,26 @@ impl PriceDB {
             .collect();
         PriceDB {
             entries,
-            fetched_count: 0,
+            embedded_count: 0,
+            cache_count: 0,
             custom_count: 0,
+            embedded_fetched_at_ms: 0,
         }
     }
 
-    pub fn push(&mut self, prefix: &str, price: Pricing) {
+    /// `src` tags the origin and doubles as precedence: on equal-length
+    /// prefix ties the LATEST entry wins, so the load order
+    /// curated → embedded → cache → custom is also the override order.
+    pub fn push(&mut self, prefix: &str, src: &str, price: Pricing) {
         self.entries.push(PriceEntry {
             prefix: prefix.to_string(),
+            src: src.to_string(),
             price,
         });
+    }
+
+    pub fn entries(&self) -> &[PriceEntry] {
+        &self.entries
     }
 
     fn key_of(model: &str) -> &str {
@@ -140,7 +208,7 @@ impl PriceDB {
             let hit = seg.starts_with(&p) || full.starts_with(&p);
             if hit {
                 let len = p.len();
-                if best.is_none_or(|(l, _)| len > l) {
+                if best.is_none_or(|(l, _)| len >= l) {
                     best = Some((len, e.price));
                 }
             }

@@ -98,6 +98,7 @@ pub fn cached_into_db(db: &mut PriceDB) -> usize {
             };
             db.push(
                 &id,
+                "cache",
                 Pricing {
                     input: num(&m["prompt"]),
                     output: num(&m["completion"]),
@@ -109,7 +110,7 @@ pub fn cached_into_db(db: &mut PriceDB) -> usize {
             n += 1;
         }
     }
-    db.fetched_count = n;
+    db.cache_count = n;
     n
 }
 

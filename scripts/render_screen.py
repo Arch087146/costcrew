@@ -32,6 +32,25 @@ BG = (13, 17, 23)
 BAR_BG = (30, 34, 43)
 DOTS = [(255, 95, 87), (254, 188, 46), (40, 200, 64)]
 
+# xterm 256-color palette for 38;5;N codes (banner gradient etc.)
+_BASE16 = [
+    (0, 0, 0), (205, 49, 49), (63, 185, 80), (210, 153, 34),
+    (121, 192, 255), (188, 63, 188), (97, 214, 214), (230, 237, 243),
+    (139, 148, 158), (255, 123, 114), (86, 211, 100), (227, 179, 65),
+    (163, 217, 255), (255, 128, 255), (154, 237, 237), (255, 255, 255),
+]
+_STEPS = [0, 95, 135, 175, 215, 255]
+
+def _pal256(n: int) -> tuple[int, int, int]:
+    if n < 16:
+        return _BASE16[n]
+    if n < 232:
+        n -= 16
+        r, g, b = (n // 36) % 6, (n // 6) % 6, n % 6
+        return (_STEPS[r], _STEPS[g], _STEPS[b])
+    g = 8 + (n - 232) * 10
+    return (g, g, g)
+
 ANSI_RE = re.compile(r"\x1b\[([0-9;]*)m")
 
 Cell = tuple[tuple[int, int, int], bool, str]  # (color, bold, char)
@@ -52,7 +71,14 @@ def tokenize_ansi(text: str) -> list[Cell]:
         for ch in text[pos : m.start()]:
             out.append((color, bold, ch))
         pos = m.end()
-        for c in (int(x) for x in m.group(1).split(";") if x != ""):
+        codes = [int(x) for x in m.group(1).split(";") if x != ""]
+        i = 0
+        while i < len(codes):
+            c = codes[i]
+            if c == 38 and i + 2 < len(codes) and codes[i + 1] == 5:
+                color = _pal256(codes[i + 2])
+                i += 3
+                continue
             if c == 0:
                 color, bold = FG, False
             elif c == 1:
@@ -64,6 +90,7 @@ def tokenize_ansi(text: str) -> list[Cell]:
             elif c in COLORS:
                 base = BRIGHT.get(c) if (bold and c in BRIGHT) else COLORS[c]
                 color = base
+            i += 1
     out.extend((color, bold, ch) for ch in text[pos:])
     return out
 
@@ -115,7 +142,19 @@ def render(rows: list[list[Cell]], prompt: list[Cell], out_path: Path, title: st
         x = 0.0
         for color, bold, ch in row:
             f = font_bold if bold else font
-            d.text((pad + x, y), ch, font=f, fill=color)
+            # block glyphs fill their whole cell (PIL + Consolas leaves seams)
+            if ch == "█":
+                d.rectangle([pad + x, y, pad + x + cell_w - 1, y + cell_h - 1], fill=color)
+            elif ch == "▀":
+                d.rectangle([pad + x, y, pad + x + cell_w - 1, y + cell_h / 2 - 1], fill=color)
+            elif ch == "▄":
+                d.rectangle([pad + x, y + cell_h / 2, pad + x + cell_w - 1, y + cell_h - 1], fill=color)
+            elif ch == "▌":
+                d.rectangle([pad + x, y, pad + x + cell_w / 2 - 1, y + cell_h - 1], fill=color)
+            elif ch == "▐":
+                d.rectangle([pad + x + cell_w / 2, y, pad + x + cell_w - 1, y + cell_h - 1], fill=color)
+            else:
+                d.text((pad + x, y), ch, font=f, fill=color)
             x += cell_w
         y += cell_h
 
@@ -141,16 +180,28 @@ def main():
         max_lines = int(sys.argv[i + 1])
         del sys.argv[i : i + 2]
 
+    # --from-file: read captured ANSI text instead of running the exe.
+    # Used for the interactive app: drive_ui captures its real output
+    # while the app is alive, then we render that capture.
+    from_file = None
+    if "--from-file" in sys.argv:
+        i = sys.argv.index("--from-file")
+        from_file = Path(sys.argv[i + 1])
+        del sys.argv[i : i + 2]
+
     run_args = sys.argv[sys.argv.index("--") + 1 :]
 
-    proc = subprocess.run(
-        [str(EXE), *run_args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    body = (proc.stdout if proc.stdout.strip() else proc.stderr) + "\x1b[0m"
+    if from_file:
+        body = from_file.read_text(encoding="utf-8") + "\x1b[0m"
+    else:
+        proc = subprocess.run(
+            [str(EXE), *run_args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        body = (proc.stdout if proc.stdout.strip() else proc.stderr) + "\x1b[0m"
 
     prompt = [
         *[(DIM, False, ch) for ch in "PS C:\\sources\\costcrew> "],
