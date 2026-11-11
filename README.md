@@ -9,6 +9,8 @@ totaled by month and service, plus provider-reported truth from your API keys.
 
 <p align="center">
   <img src="assets/ui.png" alt="costcrew interactive app — gradient splash screen and arrow-key menu" width="680">
+  <br>
+  <img src="assets/mascot.png" alt="the costcrew coin mascot, spinning while the price database loads" width="380">
 </p>
 
 Type `costcrew` and you get the app above: splash, menu, arrow keys. All the
@@ -75,12 +77,27 @@ separate:
 ## Install
 
 ```sh
+# macOS / Linux (curl)
+curl -fsSL https://raw.githubusercontent.com/Arch087146/costcrew/main/install.sh | sh
+
+# Windows (PowerShell)
+powershell -c "irm https://raw.githubusercontent.com/Arch087146/costcrew/main/install.ps1 | iex"
+
+# Homebrew
+brew install Arch087146/tap/costcrew
+
+# npm (prebuilt binary — no compile step)
+npm install -g @arch087146/costcrew
+
+# winget (Windows)
+winget install Arch087146.costcrew
+
 # from source (Rust 1.80+)
 git clone https://github.com/Arch087146/costcrew
 cargo install --path costcrew
 ```
 
-Prebuilt binaries land on the [Releases](https://github.com/Arch087146/costcrew/releases)
+Prebuilt binaries also land on the [Releases](https://github.com/Arch087146/costcrew/releases)
 page when a tag is pushed. No runtime dependencies — the database travels with
 the binary.
 
