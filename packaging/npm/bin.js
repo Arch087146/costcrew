@@ -22,12 +22,15 @@ if (!rel) {
 }
 
 function resolveBinary() {
-  const direct = path.join(__dirname, "..", rel);
+  // __dirname is node_modules/@archeagle087/costcrew — two levels up is
+  // node_modules, where the platform packages live
+  const nm = path.join(__dirname, "..", "..");
+  const direct = path.join(nm, rel);
   if (fs.existsSync(direct)) return direct;
   // npm can hoist/reshape optionalDependencies — fall back to resolution
   const [pkg, file] = rel.split("/");
   try {
-    const dir = path.dirname(require.resolve(`${pkg}/package.json`, { paths: [__dirname] }));
+    const dir = path.dirname(require.resolve(`${pkg}/package.json`, { paths: [nm] }));
     return path.join(dir, file);
   } catch {
     return direct; // let spawn fail with a clear ENOENT
