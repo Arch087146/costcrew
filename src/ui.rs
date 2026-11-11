@@ -40,11 +40,34 @@ const BANNER: &[&str] = &[
     "█     █   █ █████   █  ",
     "█     █   █     █   █  ",
     "█████ █████ █████   █  ",
-    "█████ █████ █   █ █   █",
-    "█   █ █     █   █ █   █",
-    "█████ ████  █ █ █ █ █ █",
-    "█   █ █     █ █ █ █ █ █",
-    "█   █ █████ ██ ██ ██ ██",
+    "█████ █████ █████ █   █",
+    "█     █   █ █     █   █",
+    "█     █████ ████  █ █ █",
+    "█     █  █  █     █ █ █",
+    "█████ █   █ █████ ██ ██",
+];
+
+/// the costcrew mascot: a coin with a dollar-sign, mid-spin.
+/// Only block glyphs + ASCII, so it renders in every terminal font.
+#[rustfmt::skip]
+const MASCOT_FACE: &[&str] = &[
+    " ▄▄▄▄▄ ",
+    "█  $  █",
+    " ▀▀▀▀▀ ",
+];
+
+#[rustfmt::skip]
+const MASCOT_THREEQUARTER: &[&str] = &[
+    " ▄▄▄▄ ",
+    "▌ $ ▐",
+    " ▀▀▀▀ ",
+];
+
+#[rustfmt::skip]
+const MASCOT_EDGE: &[&str] = &[
+    " ▄▄ ",
+    "▌$▐",
+    " ▀▀ ",
 ];
 
 struct Item {
@@ -103,42 +126,30 @@ pub fn run_app() {
     let mut out = std::io::stdout();
     let _ = out.write_all(CLEAR.as_bytes());
 
-    // --- animated build-up: banner cascades, subtitle, spinner, items ---
-    for (i, line) in BANNER.iter().enumerate() {
-        write_line(&mut out, &format!("{}{line}{RESET}", GRAD[i % GRAD.len()]));
-        std::thread::sleep(std::time::Duration::from_millis(55));
-    }
-    write_line(
-        &mut out,
-        &format!(
-            "\r\n  {BOLD}the AI coding price database{RESET} {DIM}+ your spend · v{}{RESET}",
-            env!("CARGO_PKG_VERSION")
-        ),
-    );
-
-    // load the DB (it's fast — the spinner is for the vibe, like the big CLIs)
-    let frames = ["-", "\\", "|", "/"];
-    let db = {
-        let mut db = PriceDB::builtin();
-        let mut f = frames.iter().cycle();
-        let mut loaded = false;
-        for _ in 0..24 {
-            if !loaded {
-                crate::fetch::cached_into_db(&mut db);
-                loaded = true;
-            }
-            let n = db.entries().len();
-            write_inline(
-                &mut out,
-                &format!("\r  {CYAN}{}{RESET} {DIM}loading bundled price database · {n} models ...{RESET}  ", f.next().unwrap()),
-            );
-            std::thread::sleep(std::time::Duration::from_millis(40));
+    // --- the opener: the coin mascot spins while the database loads ---
+    let mut db = PriceDB::builtin();
+    crate::fetch::cached_into_db(&mut db);
+    let n = db.entries().len();
+    let spin = [MASCOT_FACE, MASCOT_THREEQUARTER, MASCOT_EDGE, MASCOT_THREEQUARTER];
+    for (i, frame) in spin.iter().cycle().take(18).enumerate() {
+        if i > 0 {
+            // rewind above the 3 mascot lines to redraw in place
+            let _ = out.write_all(b"\x1b[3A");
         }
-        write_inline(&mut out, "\r\x1b[2K"); // wipe the spinner line
-        db
-    };
+        let mut block = String::new();
+        for line in *frame {
+            block.push_str(&format!("\x1b[2K\r{CYAN}{line}{RESET}\r\n"));
+        }
+        block.push_str(&format!(
+            "\x1b[2K\r  {DIM}loading bundled price database · {n} models{RESET}"
+        ));
+        let _ = out.write_all(block.as_bytes());
+        out.flush().ok();
+        std::thread::sleep(std::time::Duration::from_millis(115));
+    }
+    std::thread::sleep(std::time::Duration::from_millis(250));
 
-    // --- menu items cascade in ---
+    // --- menu items cascade in, banner on top ---
     let mut sel = 0usize;
     draw_menu(&mut out, &db, sel, true);
 
@@ -255,8 +266,9 @@ fn frame(db: &PriceDB, sel: usize) -> String {
         s.push_str("\r\n");
     }
     s.push_str(&format!(
-        "\r\n  {BOLD}costcrew{RESET} {DIM}· {} models bundled · offline{RESET}\r\n\r\n",
-        db.entries().len()
+        "\r\n  {BOLD}the AI coding price database{RESET} {DIM}· {n} models bundled · offline · v{}{RESET}\r\n\r\n",
+        env!("CARGO_PKG_VERSION"),
+        n = db.entries().len()
     ));
     for (i, it) in ITEMS.iter().enumerate() {
         let num = if i == 9 {
@@ -297,11 +309,6 @@ fn draw_menu(out: &mut std::io::Stdout, db: &PriceDB, sel: usize, animate: bool)
 fn write_line(out: &mut std::io::Stdout, s: &str) {
     let _ = out.write_all(s.as_bytes());
     let _ = out.write_all(b"\r\n");
-    out.flush().ok();
-}
-
-fn write_inline(out: &mut std::io::Stdout, s: &str) {
-    let _ = out.write_all(s.as_bytes());
     out.flush().ok();
 }
 
