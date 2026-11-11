@@ -1,0 +1,97 @@
+name: npm-release
+# Publishes @arch087146/costcrew plus one binary package per platform.
+# Runs on every v* tag, after the Release workflow has uploaded assets.
+# Without NPM_TOKEN set in repo secrets this publishes nothing — it exits
+# with a notice so the run stays green and the steps are easy to find.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: version → tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: check for NPM_TOKEN
+        id: tok
+        run: |
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            echo "have_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN secret not set — skipping npm publish. Add it in Settings → Secrets → Actions."
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: download release assets
+        if: steps.tok.outputs.have_token == 'true'
+        run: |
+          mkdir -p dist
+          for a in costcrew-linux-x86_64.tar.gz costcrew-macos-aarch64.tar.gz \
+                   costcrew-macos-x86_64.tar.gz costcrew-windows-x86_64.zip; do
+            curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${a}" -o "dist/${a}"
+          done
+
+      - name: assemble + publish platform packages
+        if: steps.tok.outputs.have_token == 'true'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          V="${VERSION}"
+          mkdir -p work
+
+          # platform package = one package.json + the naked binary
+          emit() { # name asset cmd
+            local name="$1" asset="$2" cmd="$3" dir="work/$1"
+            mkdir -p "$dir"
+            tar xzf "dist/$asset" -C "$dir" || true
+            unzip -qo "dist/$asset" -d "$dir" || true
+            [ -f "$dir/$cmd" ] || { echo "::error::binary $cmd missing from $asset"; exit 1; }
+            chmod +x "$dir/$cmd"
+            cat > "$dir/package.json" <<EOF
+          {
+            "name": "@arch087146/$name",
+            "version": "$V",
+            "description": "costcrew native binary ($name) — do not install directly",
+            "os": ["$4"],
+            "cpu": ["$5"],
+            "license": "MIT",
+            "repository": "github:Arch087146/costcrew"
+          }
+          EOF
+            # files field: ship only what's needed
+            ( cd "$dir" && npm publish --access public --non-interactive )
+          }
+
+          emit costcrew-linux-x64     costcrew-linux-x86_64.tar.gz costcrew     linux x64
+          emit costcrew-darwin-arm64  costcrew-macos-aarch64.tar.gz costcrew    darwin arm64
+          emit costcrew-darwin-x64    costcrew-macos-x86_64.tar.gz costcrew     darwin x64
+          emit costcrew-win32-x64     costcrew-windows-x86_64.zip  costcrew.exe win32 x64
+
+      - name: publish wrapper
+        if: steps.tok.outputs.have_token == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cp packaging/npm/package.json .
+          sed -i "s/\"0\.4\.0\"/\"${{ steps.ver.outputs.version }}\"/g" package.json
+          cp packaging/npm/bin.js .
+          npm publish --access public --non-interactive

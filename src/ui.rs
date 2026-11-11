@@ -130,7 +130,12 @@ pub fn run_app() {
     let mut db = PriceDB::builtin();
     crate::fetch::cached_into_db(&mut db);
     let n = db.entries().len();
-    let spin = [MASCOT_FACE, MASCOT_THREEQUARTER, MASCOT_EDGE, MASCOT_THREEQUARTER];
+    let spin = [
+        MASCOT_FACE,
+        MASCOT_THREEQUARTER,
+        MASCOT_EDGE,
+        MASCOT_THREEQUARTER,
+    ];
     for (i, frame) in spin.iter().cycle().take(18).enumerate() {
         if i > 0 {
             // rewind above the 3 mascot lines to redraw in place
