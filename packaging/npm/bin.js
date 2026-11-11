@@ -23,17 +23,21 @@ if (!rel) {
 
 function resolveBinary() {
   // __dirname is node_modules/@archeagle087/costcrew — two levels up is
-  // node_modules, where the platform packages live
+  // node_modules, where the platform packages normally live; npm can also
+  // nest them under the wrapper's own node_modules
   const nm = path.join(__dirname, "..", "..");
-  const direct = path.join(nm, rel);
-  if (fs.existsSync(direct)) return direct;
-  // npm can hoist/reshape optionalDependencies — fall back to resolution
+  const nested = path.join(__dirname, "node_modules");
+  for (const base of [nm, nested]) {
+    const direct = path.join(base, rel);
+    if (fs.existsSync(direct)) return direct;
+  }
+  // last resort: node resolution from both bases
   const [pkg, file] = rel.split("/");
   try {
-    const dir = path.dirname(require.resolve(`${pkg}/package.json`, { paths: [nm] }));
+    const dir = path.dirname(require.resolve(`${pkg}/package.json`, { paths: [nm, __dirname] }));
     return path.join(dir, file);
   } catch {
-    return direct; // let spawn fail with a clear ENOENT
+    return path.join(nm, rel); // let spawn fail with a clear ENOENT
   }
 }
 

@@ -5,6 +5,9 @@
   "bin": {
     "costcrew": "bin.js"
   },
+  "files": [
+    "bin.js"
+  ],
   "optionalDependencies": {
     "@archeagle087/costcrew-win32-x64": "0.4.0",
     "@archeagle087/costcrew-linux-x64": "0.4.0",
