@@ -1,5 +1,5 @@
 name: npm-release
-# Publishes @arch087146/costcrew plus one binary package per platform.
+# Publishes @archeagle087/costcrew plus one binary package per platform.
 # Runs on every v* tag, after the Release workflow has uploaded assets.
 # Without NPM_TOKEN set in repo secrets this publishes nothing — it exits
 # with a notice so the run stays green and the steps are easy to find.
@@ -68,7 +68,7 @@ jobs:
             chmod +x "$dir/$cmd"
             cat > "$dir/package.json" <<EOF
           {
-            "name": "@arch087146/$name",
+            "name": "@archeagle087/$name",
             "version": "$V",
             "description": "costcrew native binary ($name) — do not install directly",
             "os": ["$4"],

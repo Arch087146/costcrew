@@ -1,15 +1,15 @@
 {
-  "name": "@arch087146/costcrew",
+  "name": "@archeagle087/costcrew",
   "version": "0.4.0",
   "description": "The AI coding price database, plus what you spend on it — interactive terminal app. Bundled 465+ model prices, your spend ledger, arena leaderboard priced elo-per-dollar.",
   "bin": {
     "costcrew": "bin.js"
   },
   "optionalDependencies": {
-    "@arch087146/costcrew-win32-x64": "0.4.0",
-    "@arch087146/costcrew-linux-x64": "0.4.0",
-    "@arch087146/costcrew-darwin-arm64": "0.4.0",
-    "@arch087146/costcrew-darwin-x64": "0.4.0"
+    "@archeagle087/costcrew-win32-x64": "0.4.0",
+    "@archeagle087/costcrew-linux-x64": "0.4.0",
+    "@archeagle087/costcrew-darwin-arm64": "0.4.0",
+    "@archeagle087/costcrew-darwin-x64": "0.4.0"
   },
   "os": ["win32", "linux", "darwin"],
   "cpu": ["x64", "arm64"],

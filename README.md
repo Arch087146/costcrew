@@ -87,7 +87,7 @@ powershell -c "irm https://raw.githubusercontent.com/Arch087146/costcrew/main/in
 brew install Arch087146/tap/costcrew
 
 # npm (prebuilt binary — no compile step)
-npm install -g @arch087146/costcrew
+npm install -g @archeagle087/costcrew
 
 # winget (Windows)
 winget install Arch087146.costcrew

@@ -7,10 +7,10 @@ const path = require("path");
 const fs = require("fs");
 
 const PLATFORMS = {
-  "win32-x64": "@arch087146/costcrew-win32-x64/costcrew.exe",
-  "linux-x64": "@arch087146/costcrew-linux-x64/costcrew",
-  "darwin-arm64": "@arch087146/costcrew-darwin-arm64/costcrew",
-  "darwin-x64": "@arch087146/costcrew-darwin-x64/costcrew",
+  "win32-x64": "@archeagle087/costcrew-win32-x64/costcrew.exe",
+  "linux-x64": "@archeagle087/costcrew-linux-x64/costcrew",
+  "darwin-arm64": "@archeagle087/costcrew-darwin-arm64/costcrew",
+  "darwin-x64": "@archeagle087/costcrew-darwin-x64/costcrew",
 };
 
 const key = `${process.platform}-${process.arch}`;
