@@ -108,6 +108,7 @@ costcrew                     # the interactive app (splash + arrow-key menu)
 costcrew prices claude       # browse the database, filtered
 costcrew spend               # your recorded payments, totaled
 costcrew leaderboard         # arena Elo, priced — elo-per-dollar value sort
+costcrew budget 20           # best model for $20/month (asks your tasks)
 costcrew catalog             # which agent ships with which models
 costcrew scan --since 7d     # optional: estimate from local agent logs
 costcrew md > spend.md       # shareable markdown report

@@ -31,20 +31,16 @@ const GRAD: [&str; 5] = [
     "\x1b[38;5;27m",
 ];
 
-/// "COST / CREW" in solid blocks (double-line box glyphs render as tofu in
-/// plain conhost; solid █ renders everywhere)
+/// "COST CREW" in solid blocks, letters side by side on one line
+/// (double-line box glyphs render as tofu in plain conhost; solid █
+/// renders everywhere)
 #[rustfmt::skip]
 const BANNER: &[&str] = &[
-    "█████ █████ █████ █████",
-    "█     █   █ █       █  ",
-    "█     █   █ █████   █  ",
-    "█     █   █     █   █  ",
-    "█████ █████ █████   █  ",
-    "█████ █████ █████ █   █",
-    "█     █   █ █     █   █",
-    "█     █████ ████  █ █ █",
-    "█     █  █  █     █ █ █",
-    "█████ █   █ █████ ██ ██",
+    "█████ █████ █████ █████  █████ █████ █████ █   █",
+    "█     █   █ █     █   █  █     █   █ █     █   █",
+    "█     █   █ █████   █    █     █████ █████ █   █",
+    "█     █   █     █   █    █     █  █  █     █ █ █",
+    "█████ █████ █████   █    █████ █   █ █████ ██ ██",
 ];
 
 /// the costcrew mascot: a coin with a dollar-sign, mid-spin.
@@ -75,7 +71,7 @@ struct Item {
     hint: &'static str,
 }
 
-const ITEMS: [Item; 10] = [
+const ITEMS: [Item; 11] = [
     Item {
         name: "price database",
         hint: "every model, bundled, offline — browse & filter",
@@ -87,6 +83,10 @@ const ITEMS: [Item; 10] = [
     Item {
         name: "add a payment",
         hint: "record what you just paid (sub, credits, GPU)",
+    },
+    Item {
+        name: "budget planner",
+        hint: "best model for your monthly budget — elo per dollar",
     },
     Item {
         name: "leaderboard",
@@ -126,7 +126,7 @@ pub fn run_app() {
     let mut out = std::io::stdout();
     let _ = out.write_all(CLEAR.as_bytes());
 
-    // --- the opener: the coin mascot spins while the database loads ---
+    // --- act 1: the coin mascot spins while the database loads ---
     let mut db = PriceDB::builtin();
     crate::fetch::cached_into_db(&mut db);
     let n = db.entries().len();
@@ -136,7 +136,7 @@ pub fn run_app() {
         MASCOT_EDGE,
         MASCOT_THREEQUARTER,
     ];
-    for (i, frame) in spin.iter().cycle().take(18).enumerate() {
+    for (i, frame) in spin.iter().cycle().take(14).enumerate() {
         if i > 0 {
             // rewind above the 3 mascot lines to redraw in place
             let _ = out.write_all(b"\x1b[3A");
@@ -152,11 +152,59 @@ pub fn run_app() {
         out.flush().ok();
         std::thread::sleep(std::time::Duration::from_millis(115));
     }
-    std::thread::sleep(std::time::Duration::from_millis(250));
 
-    // --- menu items cascade in, banner on top ---
+    // --- act 2: the title builds itself in, then a gradient sweep shimmers
+    // across it, then the subtitle types itself out ---
+    let _ = out.write_all(CLEAR.as_bytes());
+    for (i, line) in BANNER.iter().enumerate() {
+        write_line(&mut out, &format!("{}{line}{RESET}", GRAD[i]));
+        std::thread::sleep(std::time::Duration::from_millis(65));
+    }
+    // sweep the palette around the banner and back (offsets end at 0 so it
+    // settles on the default gradient)
+    for off in [1usize, 2, 3, 0] {
+        let mut block = String::from("\x1b[5A");
+        for (i, line) in BANNER.iter().enumerate() {
+            block.push_str(&format!(
+                "\x1b[2K\r{}{line}{RESET}\r\n",
+                GRAD[(i + off) % GRAD.len()]
+            ));
+        }
+        let _ = out.write_all(block.as_bytes());
+        out.flush().ok();
+        std::thread::sleep(std::time::Duration::from_millis(90));
+    }
+    // subtitle: the bold phrase types itself out, the dim tail fades in after
+    let chars: Vec<char> = "the AI coding price database".chars().collect();
+    for j in 1..=chars.len() {
+        write_inline(
+            &mut out,
+            &format!(
+                "\x1b[2K\r  {BOLD}{}{RESET}",
+                chars[..j].iter().collect::<String>()
+            ),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(22));
+    }
+    write_line(
+        &mut out,
+        &format!(
+            " {DIM}· {n} models bundled · offline · v{}{RESET}",
+            env!("CARGO_PKG_VERSION"),
+            n = db.entries().len()
+        ),
+    );
+    write_line(&mut out, "");
+
+    // --- act 3: menu items cascade in ---
     let mut sel = 0usize;
-    draw_menu(&mut out, &db, sel, true);
+    for i in 0..ITEMS.len() {
+        write_line(&mut out, &item_line(i, sel));
+        std::thread::sleep(std::time::Duration::from_millis(28));
+    }
+    write_line(&mut out, "");
+    write_line(&mut out, &format!("  {YELLOW}{FOOTER}{RESET}"));
+    out.flush().ok();
 
     // --- input loop: raw mode stays ON so keypresses don't flicker ---
     if enable_raw_mode().is_err() {
@@ -229,12 +277,17 @@ fn act(sel: usize, out: &mut std::io::Stdout) {
         1 => crate::flow(base(Cmd::Spend)),
         2 => crate::spend::interactive_add(),
         3 => {
+            let mut db = PriceDB::builtin();
+            crate::fetch::cached_into_db(&mut db);
+            crate::budget::interactive_plan(&db);
+        }
+        4 => {
             let mut args = base(Cmd::Leaderboard);
             args.top = 25;
             crate::flow(args);
         }
-        4 => crate::flow(base(Cmd::Catalog)),
-        5 => {
+        5 => crate::flow(base(Cmd::Catalog)),
+        6 => {
             let key = match std::env::var("OPENROUTER_API_KEY") {
                 Ok(k) => k,
                 Err(_) => prompt("OpenRouter key (sk-or-v1-...)"),
@@ -245,10 +298,10 @@ fn act(sel: usize, out: &mut std::io::Stdout) {
             }
             crate::flow(args);
         }
-        6 => crate::flow(base(Cmd::Fetch)),
-        7 => crate::flow(base(Cmd::Scan)),
-        8 => crate::flow(base(Cmd::Advise)),
-        9 => crate::flow(base(Cmd::Demo)),
+        7 => crate::flow(base(Cmd::Fetch)),
+        8 => crate::flow(base(Cmd::Scan)),
+        9 => crate::flow(base(Cmd::Advise)),
+        10 => crate::flow(base(Cmd::Demo)),
         _ => {}
     }
 
@@ -275,26 +328,34 @@ fn frame(db: &PriceDB, sel: usize) -> String {
         env!("CARGO_PKG_VERSION"),
         n = db.entries().len()
     ));
-    for (i, it) in ITEMS.iter().enumerate() {
-        let num = if i == 9 {
-            "0".to_string()
-        } else {
-            format!("{}", i + 1)
-        };
-        if i == sel {
-            s.push_str(&format!(
-                "  {CYAN}▸ {num} {BOLD}{:<20}{RESET} {CYAN}{}{RESET}\r\n",
-                it.name, it.hint
-            ));
-        } else {
-            s.push_str(&format!(
-                "    {DIM}{num} {:<20}{RESET} {DIM}{}{RESET}\r\n",
-                it.name, it.hint
-            ));
-        }
+    for i in 0..ITEMS.len() {
+        s.push_str(&item_line(i, sel));
+        s.push_str("\r\n");
     }
     s.push_str(&format!("\r\n  {YELLOW}{FOOTER}{RESET}\r\n"));
     s
+}
+
+/// one menu item line, numbered, selected or not (shared by the splash
+/// cascade and the static frame so they always render identically)
+fn item_line(i: usize, sel: usize) -> String {
+    let it = &ITEMS[i];
+    let num = if i == 9 {
+        "0".to_string()
+    } else {
+        format!("{}", i + 1)
+    };
+    if i == sel {
+        format!(
+            "  {CYAN}▸ {num} {BOLD}{:<20}{RESET} {CYAN}{}{RESET}",
+            it.name, it.hint
+        )
+    } else {
+        format!(
+            "    {DIM}{num} {:<20}{RESET} {DIM}{}{RESET}",
+            it.name, it.hint
+        )
+    }
 }
 
 fn draw_menu(out: &mut std::io::Stdout, db: &PriceDB, sel: usize, animate: bool) {
@@ -314,6 +375,12 @@ fn draw_menu(out: &mut std::io::Stdout, db: &PriceDB, sel: usize, animate: bool)
 fn write_line(out: &mut std::io::Stdout, s: &str) {
     let _ = out.write_all(s.as_bytes());
     let _ = out.write_all(b"\r\n");
+    out.flush().ok();
+}
+
+/// write without a newline, same cell line (typewriter, spinner)
+fn write_inline(out: &mut std::io::Stdout, s: &str) {
+    let _ = out.write_all(s.as_bytes());
     out.flush().ok();
 }
 
@@ -358,7 +425,7 @@ fn wait_any_key() -> Option<KeyEvent> {
     k
 }
 
-fn prompt(label: &str) -> String {
+pub fn prompt(label: &str) -> String {
     print!("  {CYAN}{label}{RESET} ");
     std::io::stdout().flush().ok();
     let mut s = String::new();

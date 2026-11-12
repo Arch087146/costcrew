@@ -27,6 +27,7 @@ pub enum Cmd {
     Advise,
     Catalog,
     Leaderboard,
+    Budget,
     OpenRouter,
     Prices,
     Spend,
@@ -113,6 +114,10 @@ pub fn parse_inner(args: &mut Args, argv: &[String], seen_cmd: &mut bool) -> Res
             }
             "leaderboard" | "lb" | "board" if !*seen_cmd => {
                 args.cmd = Cmd::Leaderboard;
+                *seen_cmd = true;
+            }
+            "budget" | "plan" if !*seen_cmd => {
+                args.cmd = Cmd::Budget;
                 *seen_cmd = true;
             }
             "catalog" if !*seen_cmd => {
@@ -204,6 +209,10 @@ USAGE — THE DATABASE:
                                  --sort name|price|cheap  --top N  --json
     costcrew leaderboard         arena Elo ranked with prices:
                                  --sort elo|value|price  --top N  --json
+    costcrew budget 20           best model you can afford for $20/month:
+                                 asks what tasks you use AI for (or defaults
+                                 to agentic coding); `costcrew budget 20 1,3`
+                                 pre-picks the task mix from the list
     costcrew catalog             which agent ships with which models
     costcrew fetch-prices        refresh the DB from OpenRouter live
                                  (cached at %LOCALAPPDATA%\\costcrew)

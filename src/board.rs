@@ -23,7 +23,7 @@ pub struct BoardEntry {
 /// Snapshot: LMArena Coding category, Nov 2026 (~2.0M votes). Best-effort row
 /// per model (highest reasoning effort). Elo only — margins are ±4–19 pts.
 #[rustfmt::skip]
-static BOARD: &[BoardEntry] = &[
+pub static BOARD: &[BoardEntry] = &[
     BoardEntry { prefix: "gemini-4-carbon",     display: "Gemini 4 Carbon   · Google",      elo: 1564.0, votes: 1069 },
     BoardEntry { prefix: "gemini-4-argon",      display: "Gemini 4 Argon    · Google",      elo: 1553.0, votes: 4440 },
     BoardEntry { prefix: "claude-fable-5-1",    display: "Claude Fable 5.1  · Anthropic",   elo: 1534.0, votes: 3870 },
@@ -218,7 +218,7 @@ pub fn print_board(db: &PriceDB, sort: Sort, top: usize, json: bool) {
     println!();
 }
 
-fn format_votes(v: u64) -> String {
+pub fn format_votes(v: u64) -> String {
     if v >= 1000 {
         format!("{:.1}k", v as f64 / 1000.0)
     } else {

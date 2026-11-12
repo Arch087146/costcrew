@@ -1,6 +1,7 @@
 mod advise;
 mod args;
 mod board;
+mod budget;
 mod catalog;
 mod demo;
 mod fetch;
@@ -74,6 +75,14 @@ pub fn flow(args: Args) {
                 None => board::Sort::Elo,
             };
             board::print_board(&db, sort, args.top, args.json);
+        }
+        Cmd::Budget => {
+            let mut db = PriceDB::builtin();
+            fetch::cached_into_db(&mut db);
+            if let Some(path) = &args.prices {
+                load_custom(&mut db, path);
+            }
+            budget::run(&db, &args.pos, args.json);
         }
         Cmd::OpenRouter => {
             run_openrouter(&args);
