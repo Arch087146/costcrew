@@ -1,5 +1,6 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 PackageIdentifier: Arch087146.costcrew
-PackageVersion: 0.4.0
+PackageVersion: 0.4.2
 PackageLocale: en-US
 Publisher: Arch087146
 PublisherUrl: https://github.com/Arch087146

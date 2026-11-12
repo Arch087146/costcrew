@@ -5,10 +5,10 @@ These three files submit costcrew to the official winget community repo.
 ## How to submit (one-time per release)
 
 1. Fork https://github.com/microsoft/winget-pkgs
-2. Copy the `0.4.0/` folder (all three YAML files) to
-   `manifests/a/Arch087146/costcrew/0.4.0/` in your fork.
+2. Copy the `0.4.2/` folder (all three YAML files) to
+   `manifests/a/Arch087146/costcrew/0.4.2/` in your fork.
 3. Open a PR against `microsoft/winget-pkgs` with title
-   `Add: Arch087146.costcrew version 0.4.0`.
+   `Add: Arch087146.costcrew version 0.4.2`.
 4. The PR checks will run winget's manifest validator automatically.
    Once a maintainer approves, the package goes live and
    `winget install Arch087146.costcrew` works.
