@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 PackageIdentifier: Arch087146.costcrew
-PackageVersion: 0.4.2
+PackageVersion: 0.4.3
 PackageLocale: en-US
 Publisher: Arch087146
 PublisherUrl: https://github.com/Arch087146
@@ -15,7 +15,7 @@ Description: |-
   key, nothing to configure. Second: your own spend, recorded by you, totaled
   by month and service, plus provider-reported truth from your API keys.
   Type `costcrew` for the interactive app; flags like `costcrew prices claude`
-  work for scripting.
+  or `costcrew budget 20` work for scripting.
 Moniker: costcrew
 Tags:
 - ai

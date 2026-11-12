@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
 PackageIdentifier: Arch087146.costcrew
-PackageVersion: 0.4.2
+PackageVersion: 0.4.3
 Installers:
 - Architecture: x64
   InstallerType: zip
-  InstallerUrl: https://github.com/Arch087146/costcrew/releases/download/v0.4.2/costcrew-windows-x86_64.zip
-  InstallerSha256: 842D30915044874084128D9C55A41AD4B551980EE0538BF06CEE70F65C85A5D0
+  InstallerUrl: https://github.com/Arch087146/costcrew/releases/download/v0.4.3/costcrew-windows-x86_64.zip
+  InstallerSha256: 6807320433B84DBA682DCBE8B1119EFE97D5C9D60F6DD00B81C50596C716B27B
   NestedInstallerType: portable
   NestedInstallerFiles:
   - RelativeFilePath: costcrew.exe
