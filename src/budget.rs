@@ -18,6 +18,32 @@ pub struct Task {
     pub cache_m: f64,
 }
 
+/// flat-rate subscription plans — completely different economics from token
+/// billing: a seat includes the flagship models, rate-limited, no API.
+/// List prices, approximate — check the vendor page.
+const SUBS: &[(&str, f64, &str)] = &[
+    (
+        "ChatGPT Plus",
+        20.0,
+        "GPT-6 Astra / GPT-5.x — rate-limited, no API",
+    ),
+    (
+        "Claude Pro",
+        20.0,
+        "Claude Opus / Sonnet — rate-limited, no API",
+    ),
+    (
+        "GitHub Copilot Pro",
+        10.0,
+        "multi-model incl. GPT + Claude, in-IDE agents",
+    ),
+    (
+        "Gemini (Google) Pro",
+        20.0,
+        "Gemini 4 / 3.8 Flash — rate-limited",
+    ),
+];
+
 /// monthly token mixes per task, from real agent/session logs (approximate)
 const TASKS: &[Task] = &[
     Task {
@@ -232,11 +258,10 @@ pub fn plan(db: &PriceDB, budget: f64, picks: &[usize], json: bool) {
                 );
             }
 
-            // the next step up — best model that does NOT fit the budget
+            // the closest step up — CHEAPEST model that beats the pick
             let best_elo = BOARD[r.idx].elo;
             if let Some(up) = rows
                 .iter()
-                .rev()
                 .find(|row| row.cost > budget && BOARD[row.idx].elo > best_elo)
             {
                 let b = &BOARD[up.idx];
@@ -268,12 +293,27 @@ pub fn plan(db: &PriceDB, budget: f64, picks: &[usize], json: bool) {
             "  {DIM}{unpriced} board models excluded — no price in the database, and ? is never guessed.{RESET}"
         );
     }
+
+    // flat-rate subscriptions: a ~$20 seat can include models that would cost
+    // 5-10x this budget on pay-per-token rails — say so, it changes the answer
+    let subs: Vec<&(&str, f64, &str)> = SUBS
+        .iter()
+        .filter(|(_, price, _)| *price <= budget)
+        .collect();
+    if !subs.is_empty() {
+        println!();
+        println!("  {BOLD}flat-rate subscriptions that fit{RESET} {DIM}(seat ≠ tokens: rate-limited, no API){RESET}");
+        for (name, price, includes) in subs {
+            println!("    {CYAN}{name}{RESET} {DIM}~${price:.0}/mo{RESET} — {includes}");
+        }
+    }
+
     println!();
     println!(
         "  {DIM}estimates = real list prices × task token mixes (in/out/cache per month).{RESET}"
     );
     println!(
-        "  {DIM}quality = LMArena Coding Elo snapshot. subscriptions aren't token billing{RESET}"
+        "  {DIM}quality = LMArena Coding Elo snapshot. flat subs above are list prices{RESET}"
     );
     println!();
 }
