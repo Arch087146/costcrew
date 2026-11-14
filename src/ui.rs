@@ -258,6 +258,7 @@ pub fn run_app() {
     println!(
         "  {DIM}price database travels with you — {RESET}{CYAN}costcrew spend add 19.99{RESET} {DIM}from any shell{RESET}"
     );
+    println!("  {DIM}if it saved you money, a star helps others find it: github.com/Arch087146/costcrew{RESET}");
 }
 
 /// run one menu item: clear the logo away, do the thing, wait for a key
