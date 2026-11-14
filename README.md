@@ -8,12 +8,12 @@ scanning, nothing to configure. Second: your own spend — recorded by you,
 totaled by month and service, plus provider-reported truth from your API keys.
 
 <p align="center">
-  <img src="assets/ui.png" alt="costcrew interactive app — gradient splash screen and arrow-key menu" width="680">
-  <br>
-  <img src="assets/mascot.png" alt="the costcrew coin mascot, spinning while the price database loads" width="380">
+  <img src="assets/demo.gif" alt="costcrew interactive app — coin mascot spin, gradient banner cascade, shimmer, typewriter subtitle, menu cascade" width="680">
 </p>
 
-Type `costcrew` and you get the app above: splash, menu, arrow keys. All the
+Type `costcrew` and you get the app above: coin mascot spins while the price
+database loads, the banner cascades in with a gradient shimmer, the subtitle
+types itself out, and the menu cascades in. Arrow keys + enter; all the
 classic one-shot flags still work for scripting (`costcrew scan --json`, etc.).
 
 ## The price database
